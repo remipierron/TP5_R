@@ -16,7 +16,7 @@ library(readxl)
 # Mise en forme « à la française » des nombres insérés dans le texte
 # (virgule décimale, espace pour les milliers)
 fr <- function(x, d = 1) {
-  trimws(format(round(x, d), nsmall = d, big.mark = " ", decimal.mark = ","))
+  trimws(format(round(x, d), nsmall = d, big.mark = " ", decimal.mark = ","))  # espace insécable
 }
 ```
 
@@ -976,3 +976,93 @@ reste_double <- emp_propre |> count(Employee_ID) |> filter(n > 1)
 **Réponse :** `r if (all(verif$apres == 0)) "toutes les anomalies visées par les corrections ont disparu : la colonne « Après » vaut 0 partout." else paste0("attention, il reste des anomalies : ", paste(verif$anomalie[verif$apres > 0], collapse = ", "), ".")` L'employé sans identifiant (`r nouvel_id$First` `r nouvel_id$Last`) a reçu l'identifiant `r format(nouvel_id$Employee_ID, scientific = FALSE)` (= `r format(id_max, scientific = FALSE)` + 1), les pays ne prennent plus que les valeurs `r paste(sort(unique(emp_propre$Country)), collapse = " et ")`, et `Gender` contient désormais `r sum(is.na(emp_propre$Gender))` `NA` (l'ancien `G` et la valeur manquante). Les nouvelles colonnes `age_embauche` et `anciennete` sont manquantes pour les `r sum(is.na(emp_propre$age_embauche))` employés sans date d'embauche valide.
 
 Certaines anomalies de D1 ne faisaient pas partie des corrections demandées et **restent donc présentes** : `r if (nrow(reste_double) > 0) paste0("l'identifiant ", format(reste_double$Employee_ID, scientific = FALSE), " toujours attribué à ", reste_double$n, " personnes, ")`le salaire manquant (`r sum(is.na(emp_propre$Salary))`), l'intitulé de poste manquant (`r sum(is.na(emp_propre$Job_Title))`), et les `r sum(emp_propre$age_embauche < 16, na.rm = TRUE)` employés embauchés à moins de 16 ans (voir D3d).
+
+## D3
+
+### a. Salaire médian par pays et par sexe
+
+On écarte les `r sum(is.na(emp_propre$Gender))` employés dont le genre est inconnu (`NA` depuis D2).
+
+```{r D3a}
+salaire_pays_sexe <- emp_propre |>
+  filter(!is.na(Gender)) |>
+  summarise(salaire_median = median(Salary, na.rm = TRUE),
+            effectif       = n(),
+            .by = c(Country, Gender)) |>
+  arrange(Country, Gender)
+salaire_pays_sexe
+
+# Présentation : une colonne par sexe
+salaire_pays_sexe |>
+  select(-effectif) |>
+  pivot_wider(names_from = Gender, values_from = salaire_median) |>
+  mutate(ecart_F_M = F - M)
+```
+
+```{r D3a-texte, include=FALSE}
+med <- function(pays, sexe) salaire_pays_sexe$salaire_median[salaire_pays_sexe$Country == pays & salaire_pays_sexe$Gender == sexe]
+eff <- function(pays) sum(salaire_pays_sexe$effectif[salaire_pays_sexe$Country == pays])
+```
+
+**Réponse :** en Australie, le salaire médian est de `r fr(med("AU", "F"), 0)` pour les femmes et `r fr(med("AU", "M"), 0)` pour les hommes ; aux États-Unis, de `r fr(med("US", "F"), 0)` pour les femmes et `r fr(med("US", "M"), 0)` pour les hommes. L'écart entre sexes est faible dans les deux pays (`r fr(abs(med("AU", "F") - med("AU", "M")), 0)` en Australie, en faveur des `r if (med("AU", "F") > med("AU", "M")) "femmes" else "hommes"` ; `r fr(abs(med("US", "F") - med("US", "M")), 0)` aux États-Unis, en faveur des `r if (med("US", "F") > med("US", "M")) "femmes" else "hommes"`). L'écart entre pays est plus marqué : les salaires médians américains sont plus élevés d'environ `r fr(mean(c(med("US", "F"), med("US", "M"))) - mean(c(med("AU", "F"), med("AU", "M"))), 0)`. Attention, l'Australie ne compte que `r eff("AU")` employés contre `r eff("US")` aux États-Unis.
+
+### b. Les 5 intitulés de poste les plus fréquents
+
+```{r D3b}
+top_postes <- emp_propre |>
+  filter(!is.na(Job_Title)) |>
+  summarise(effectif      = n(),
+            salaire_moyen = mean(Salary, na.rm = TRUE),
+            .by = Job_Title) |>
+  slice_max(effectif, n = 5) |>      # ex aequo conservés
+  arrange(desc(effectif), Job_Title)
+top_postes
+```
+
+```{r D3b-texte, include=FALSE}
+seuil_postes <- sort(table(emp_propre$Job_Title), decreasing = TRUE)[5]   # effectif du 5e poste
+nets   <- top_postes |> filter(effectif > seuil_postes)
+egaux  <- top_postes |> filter(effectif == seuil_postes)
+```
+
+**Réponse :** `r paste0(nets$Job_Title, " (", nets$effectif, " employés, salaire moyen ", fr(nets$salaire_moyen, 0), ")", collapse = ", ")` sont les postes les plus fréquents. `r if (nrow(top_postes) > 5) paste0("Pour les places suivantes, ", nrow(egaux), " postes sont ex aequo avec ", seuil_postes, " employés chacun : ", paste0(egaux$Job_Title, " (", fr(egaux$salaire_moyen, 0), ")", collapse = ", "), ". Plutôt que d'en choisir arbitrairement, on les garde tous, d'où ", nrow(top_postes), " lignes.") else ""` Les postes les plus fréquents sont des postes d'entrée (Trainee, assistants de niveau I), avec les salaires moyens les plus bas ; `r top_postes$Job_Title[which.max(top_postes$salaire_moyen)]` se détache avec `r fr(max(top_postes$salaire_moyen), 0)` en moyenne.
+
+### c. Âge moyen à l'embauche par décennie
+
+La décennie s'obtient en arrondissant l'année d'embauche à la dizaine inférieure : `floor(annee / 10) * 10` (1987 → 1980).
+
+```{r D3c}
+age_decennie <- emp_propre |>
+  filter(!is.na(Hire_Date)) |>
+  mutate(decennie = floor(year(Hire_Date) / 10) * 10) |>
+  summarise(age_moyen = mean(age_embauche),
+            effectif  = n(),
+            .by = decennie) |>
+  arrange(decennie)
+age_decennie
+```
+
+**Réponse :** l'âge moyen à l'embauche est de `r paste0(fr(age_decennie$age_moyen), " ans dans les années ", age_decennie$decennie, collapse = ", ")`. Les premiers employés, embauchés dans les années `r age_decennie$decennie[1]` à l'ouverture de l'enseigne, étaient un peu plus âgés ; ensuite l'âge moyen se stabilise autour de `r fr(mean(age_decennie$age_moyen[-1]), 0)` ans. Les `r sum(is.na(emp_propre$Hire_Date))` employés sans date d'embauche valide sont exclus.
+
+### d. Âge minimal à l'embauche
+
+```{r D3d}
+min(emp_propre$age_embauche, na.rm = TRUE)
+
+moins_16 <- emp_propre |>
+  filter(age_embauche < 16) |>
+  select(Employee_ID, First, Last, Job_Title, Country, Birth_Date, Hire_Date, age_embauche)
+moins_16
+
+# Combien d'employés sont nés la même année que ces deux-là, et à quel âge ont-ils été embauchés ?
+emp_propre |>
+  filter(year(Birth_Date) %in% year(moins_16$Birth_Date)) |>
+  count(age_embauche)
+```
+
+```{r D3d-texte, include=FALSE}
+annee_nais <- unique(year(moins_16$Birth_Date))
+nes_meme_annee <- emp_propre |> filter(year(Birth_Date) %in% annee_nais)
+```
+
+**Réponse :** l'âge minimal à l'embauche est de **`r min(emp_propre$age_embauche, na.rm = TRUE)` ans**, et **`r nrow(moins_16)` employés** ont été embauchés avant 16 ans : `r paste0(moins_16$First, " ", moins_16$Last, " (", moins_16$Job_Title, ", ", moins_16$Country, ", embauché·e le ", format(moins_16$Hire_Date, "%d/%m/%Y"), ")", collapse = " et ")`. C'est **peu plausible** : aux États-Unis, le travail avant 16 ans est strictement encadré (horaires limités, pas pendant le temps scolaire), ce qui cadre mal avec des postes de `r paste(moins_16$Job_Title, collapse = " et de ")` dans une enseigne. Le plus probable est une **erreur de saisie** de la date de naissance ou d'embauche, à vérifier auprès du service RH plutôt qu'à corriger d'office. On remarque aussi que ces deux employés sont nés en `r paste(annee_nais, collapse = ", ")`, l'année de naissance la plus récente du fichier : les `r nrow(nes_meme_annee)` employés nés cette année-là ont tous été embauchés entre `r min(nes_meme_annee$age_embauche, na.rm = TRUE)` et `r max(nes_meme_annee$age_embauche, na.rm = TRUE)` ans, ce qui mérite aussi une vérification.
