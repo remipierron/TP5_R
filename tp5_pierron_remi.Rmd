@@ -161,3 +161,69 @@ moy_fausse / moy_juste   # facteur d'erreur
 ```
 
 **Réponse :** sans `na.strings`, les `r sum(d99_brut$Puissance == 99999)` valeurs `99999` sont comptées comme de vraies puissances et la moyenne vaut **`r fr(moy_fausse)` ch** au lieu de **`r fr(moy_juste)` ch** (moyenne calculée sur les `r sum(!is.na(d99$Puissance))` puissances connues). On se trompe donc d'environ **`r fr(moy_fausse - moy_juste, 0)` ch**, soit une moyenne environ **`r fr(moy_fausse / moy_juste, 0)` fois trop grande**. Pour information, la vraie moyenne sur les `r nrow(ref)` voitures (fichier `ref`) est de `r fr(moy_ref)` ch : même en traitant correctement les NA, il reste un écart de `r fr(abs(moy_juste - moy_ref))` ch, car les voitures dont la puissance manque ne sont pas prises en compte.
+
+## A3
+
+On commence par regarder le fichier brut. Il est encodé en latin1 : on le précise à `readLines()` pour que les accents s'affichent correctement.
+
+```{r A3-apercu}
+readLines("data/stations_janvier2026.csv", n = 6, encoding = "latin1")
+```
+
+On cherche aussi les codes non numériques dans les colonnes de mesures (colonnes 3 à 6), qui sont probablement des codes de valeurs manquantes :
+
+```{r A3-codes}
+brut <- readLines("data/stations_janvier2026.csv", encoding = "latin1")
+champs  <- do.call(rbind, strsplit(brut[-(1:3)], ";"))  # sans commentaires ni en-tête
+mesures <- champs[, 3:6]                                  # colonnes de mesures
+codes_na <- table(mesures[!grepl("^-?[0-9]+(,[0-9]+)?$", mesures)])  # ce qui n'est pas un nombre
+codes_na
+```
+
+Particularités du fichier :
+
+- **lignes de commentaire** : les 2 premières lignes commencent par `#` ;
+- **séparateur** de colonnes : `;` ;
+- **décimale** : la virgule (`2,3`) ;
+- **encodage** : latin1 (Windows), visible sur « Orléans » ou « Saint-Étienne » ;
+- **valeurs manquantes** : codées `r paste0("\x60", names(codes_na), "\x60", collapse = " et ")` ;
+- **dates** au format `jj/mm/aaaa` (`01/01/2026`).
+
+### a. Import avec readr
+
+```{r A3a}
+meteo <- read_delim(
+  "data/stations_janvier2026.csv",
+  delim   = ";",                              # séparateur de colonnes
+  comment = "#",                              # ignore les lignes de commentaire
+  na      = c("", "NA", "-", "n/a"),          # codes de valeurs manquantes
+  locale  = locale(decimal_mark = ",",        # virgule décimale
+                   encoding = "latin1"),      # fichier Windows
+  col_types = cols(
+    station  = col_character(),
+    date     = col_date(format = "%d/%m/%Y"), # jour/mois/année
+    .default = col_double()                   # températures, pluie, vent
+  )
+)
+meteo
+problems(meteo)   # aucune ligne mal lue
+```
+
+### b. Vérifications
+
+```{r A3b}
+dim(meteo)                       # dimensions
+sapply(meteo, class)             # types
+colSums(is.na(meteo))            # NA par colonne
+range(meteo$date)                # période couverte
+count(meteo, station)            # noms des stations et nombre de jours
+```
+
+```{r A3b-texte, include=FALSE}
+na_meteo   <- colSums(is.na(meteo))
+types_mto  <- sapply(meteo, class)
+periode    <- range(meteo$date)
+jours_stat <- count(meteo, station)
+```
+
+**Réponse :** `meteo` contient **`r nrow(meteo)` lignes et `r ncol(meteo)` colonnes**, et `problems()` ne signale aucune ligne mal lue (`r nrow(problems(meteo))` problème). Les types sont corrects : `date` est de classe `` `r types_mto[["date"]]` ``, `station` de classe `` `r types_mto[["station"]]` ``, et les colonnes `r paste(names(types_mto)[types_mto == "numeric"], collapse = ", ")` sont numériques. Il y a **`r sum(na_meteo)` valeurs manquantes** : `r paste(na_meteo[na_meteo > 0], "dans", names(na_meteo)[na_meteo > 0], collapse = " et ")`, aucune ailleurs. La période couverte va du `r format(periode[1], "%d/%m/%Y")` au `r format(periode[2], "%d/%m/%Y")` (`r as.numeric(diff(periode)) + 1` jours). Les `r nrow(jours_stat)` stations s'affichent avec leurs accents (`r paste(jours_stat$station, collapse = ", ")`) et ont chacune `r paste(unique(jours_stat$n), collapse = "/")` jours de relevés.
