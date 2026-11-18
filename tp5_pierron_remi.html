@@ -2953,6 +2953,182 @@ texte et devront être converties.</li>
 </ul>
 </div>
 </div>
+<div id="d2" class="section level2">
+<h2>D2</h2>
+<div id="pipeline-de-correction" class="section level3">
+<h3>Pipeline de correction</h3>
+<pre class="r"><code>id_max &lt;- max(emp$Employee_ID, na.rm = TRUE)   # plus grand identifiant existant
+
+emp_propre &lt;- emp |&gt;
+  mutate(
+    # Pays : &quot;au&quot; / &quot;us&quot; -&gt; &quot;AU&quot; / &quot;US&quot;
+    Country = toupper(Country),
+
+    # Genre : tout ce qui n&#39;est pas F ou M (&quot;G&quot;, valeur vide) devient NA
+    Gender = if_else(Gender %in% c(&quot;F&quot;, &quot;M&quot;), Gender, NA),
+
+    # Salaires &lt; 10 000 : un zéro a manifestement été oublié à la saisie
+    Salary = if_else(Salary &lt; 10000, Salary * 10, Salary),
+
+    # Texte &quot;jj/mm/aaaa&quot; -&gt; Date
+    Birth_Date = dmy(Birth_Date),
+    Hire_Date  = dmy(Hire_Date),
+
+    # Embauche avant la création de l&#39;enseigne (1974) : impossible -&gt; NA
+    Hire_Date = if_else(Hire_Date &lt; as.Date(&quot;1974-01-01&quot;), NA, Hire_Date),
+
+    # Employé sans identifiant : plus grand identifiant existant + 1
+    Employee_ID = if_else(is.na(Employee_ID), id_max + 1, Employee_ID),
+
+    # Âge à l&#39;embauche en années révolues : nombre d&#39;années complètes
+    # écoulées entre la naissance et l&#39;embauche
+    age_embauche = interval(Birth_Date, Hire_Date) %/% years(1),
+
+    # Ancienneté au 31/12/2007, en années complètes
+    anciennete = interval(Hire_Date, as.Date(&quot;2007-12-31&quot;)) %/% years(1)
+  )
+
+glimpse(emp_propre)</code></pre>
+<pre><code>## Rows: 235
+## Columns: 11
+## $ Employee_ID  &lt;dbl&gt; 120101, 120104, 120105, 120106, 120107, 120108, 120108, 1…
+## $ First        &lt;chr&gt; &quot;Patrick&quot;, &quot;Kareen&quot;, &quot;Liz&quot;, &quot;John&quot;, &quot;Sherie&quot;, &quot;Gladys&quot;, &quot;…
+## $ Last         &lt;chr&gt; &quot;Lu&quot;, &quot;Billington&quot;, &quot;Povey&quot;, &quot;Hornsey&quot;, &quot;Sheedy&quot;, &quot;Gromek…
+## $ Gender       &lt;chr&gt; &quot;M&quot;, &quot;F&quot;, &quot;F&quot;, &quot;M&quot;, &quot;F&quot;, &quot;F&quot;, &quot;F&quot;, &quot;M&quot;, &quot;M&quot;, &quot;F&quot;, &quot;F&quot;, NA…
+## $ Salary       &lt;dbl&gt; 163040, 46230, 27110, NA, 30475, 27660, 26495, 28615, 268…
+## $ Job_Title    &lt;chr&gt; &quot;Director&quot;, &quot;Administration Manager&quot;, &quot;Secretary I&quot;, &quot;Off…
+## $ Country      &lt;chr&gt; &quot;AU&quot;, &quot;AU&quot;, &quot;AU&quot;, &quot;AU&quot;, &quot;AU&quot;, &quot;AU&quot;, &quot;AU&quot;, &quot;AU&quot;, &quot;AU&quot;, &quot;AU…
+## $ Birth_Date   &lt;date&gt; 1976-08-18, 1954-05-11, 1974-12-21, 1944-12-23, 1978-02-…
+## $ Hire_Date    &lt;date&gt; 2003-07-01, 1981-01-01, 1999-05-01, 1974-01-01, NA, 2006…
+## $ age_embauche &lt;dbl&gt; 26, 26, 24, 29, NA, 22, 19, 29, NA, 21, 29, 29, 21, 20, 2…
+## $ anciennete   &lt;dbl&gt; 4, 26, 8, 33, NA, 1, 1, 28, NA, 17, 33, 33, 2, 27, 21, 23…</code></pre>
+<p><code>interval(debut, fin) %/% years(1)</code> (lubridate) compte le
+nombre d’années <strong>entières</strong> entre deux dates, en tenant
+compte des années bissextiles et du jour d’anniversaire : c’est
+exactement l’âge « révolu ». Un simple
+<code>(fin - debut) / 365.25</code> donnerait un nombre décimal
+légèrement imprécis autour des anniversaires.</p>
+</div>
+<div id="vérification-les-anomalies-de-d1-ont-elles-disparu" class="section level3">
+<h3>Vérification : les anomalies de D1 ont-elles disparu ?</h3>
+<pre class="r"><code>verif &lt;- tibble(
+  anomalie = c(
+    &quot;Employee_ID manquant&quot;,
+    &quot;Gender autre que F / M / NA&quot;,
+    &quot;Country en minuscules&quot;,
+    &quot;Salary &lt; 10 000&quot;,
+    &quot;Hire_Date antérieure à 1974&quot;,
+    &quot;Embauche avant la naissance&quot;,
+    &quot;Colonnes de dates stockées en texte&quot;
+  ),
+  avant = c(
+    sum(is.na(emp$Employee_ID)),
+    sum(!emp$Gender %in% c(&quot;F&quot;, &quot;M&quot;) &amp; !is.na(emp$Gender)),
+    sum(emp$Country != toupper(emp$Country)),
+    sum(emp$Salary &lt; 10000, na.rm = TRUE),
+    sum(emp_dates$embauche &lt; as.Date(&quot;1974-01-01&quot;), na.rm = TRUE),
+    sum(emp_dates$embauche &lt; emp_dates$naissance, na.rm = TRUE),
+    sum(sapply(emp[c(&quot;Birth_Date&quot;, &quot;Hire_Date&quot;)], is.character))
+  ),
+  apres = c(
+    sum(is.na(emp_propre$Employee_ID)),
+    sum(!emp_propre$Gender %in% c(&quot;F&quot;, &quot;M&quot;) &amp; !is.na(emp_propre$Gender)),
+    sum(emp_propre$Country != toupper(emp_propre$Country)),
+    sum(emp_propre$Salary &lt; 10000, na.rm = TRUE),
+    sum(emp_propre$Hire_Date &lt; as.Date(&quot;1974-01-01&quot;), na.rm = TRUE),
+    sum(emp_propre$Hire_Date &lt; emp_propre$Birth_Date, na.rm = TRUE),
+    sum(sapply(emp_propre[c(&quot;Birth_Date&quot;, &quot;Hire_Date&quot;)], is.character))
+  )
+)
+knitr::kable(verif, col.names = c(&quot;Anomalie&quot;, &quot;Avant&quot;, &quot;Après&quot;))</code></pre>
+<table>
+<thead>
+<tr class="header">
+<th align="left">Anomalie</th>
+<th align="right">Avant</th>
+<th align="right">Après</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Employee_ID manquant</td>
+<td align="right">1</td>
+<td align="right">0</td>
+</tr>
+<tr class="even">
+<td align="left">Gender autre que F / M / NA</td>
+<td align="right">1</td>
+<td align="right">0</td>
+</tr>
+<tr class="odd">
+<td align="left">Country en minuscules</td>
+<td align="right">6</td>
+<td align="right">0</td>
+</tr>
+<tr class="even">
+<td align="left">Salary &lt; 10 000</td>
+<td align="right">2</td>
+<td align="right">0</td>
+</tr>
+<tr class="odd">
+<td align="left">Hire_Date antérieure à 1974</td>
+<td align="right">2</td>
+<td align="right">0</td>
+</tr>
+<tr class="even">
+<td align="left">Embauche avant la naissance</td>
+<td align="right">1</td>
+<td align="right">0</td>
+</tr>
+<tr class="odd">
+<td align="left">Colonnes de dates stockées en texte</td>
+<td align="right">2</td>
+<td align="right">0</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code># Contrôles complémentaires
+table(emp_propre$Country)</code></pre>
+<pre><code>## 
+##  AU  US 
+##  36 199</code></pre>
+<pre class="r"><code>table(emp_propre$Gender, useNA = &quot;ifany&quot;)</code></pre>
+<pre><code>## 
+##    F    M &lt;NA&gt; 
+##  110  123    2</code></pre>
+<pre class="r"><code>emp_propre |&gt; filter(Employee_ID == id_max + 1) |&gt; select(Employee_ID, First, Last)</code></pre>
+<pre><code>## # A tibble: 1 × 3
+##   Employee_ID First  Last   
+##         &lt;dbl&gt; &lt;chr&gt;  &lt;chr&gt;  
+## 1      121149 Austen Ralston</code></pre>
+<pre class="r"><code>emp_propre |&gt; filter(Salary %in% (emp$Salary[emp$Salary &lt; 10000 &amp; !is.na(emp$Salary)] * 10)) |&gt;
+  select(Employee_ID, Job_Title, Salary)</code></pre>
+<pre><code>## # A tibble: 2 × 3
+##   Employee_ID Job_Title           Salary
+##         &lt;dbl&gt; &lt;chr&gt;                &lt;dbl&gt;
+## 1      120115 Service Assistant I  26500
+## 2      120191 Trainee              24010</code></pre>
+<pre class="r"><code>summary(emp_propre$age_embauche)</code></pre>
+<pre><code>##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max.     NAs 
+##      15      20      24      24      27      48       3</code></pre>
+<pre class="r"><code>summary(emp_propre$anciennete)</code></pre>
+<pre><code>##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max.     NAs 
+##    1.00    4.00   14.00   15.30   25.25   33.00       3</code></pre>
+<p><strong>Réponse :</strong> toutes les anomalies visées par les
+corrections ont disparu : la colonne « Après » vaut 0 partout. L’employé
+sans identifiant (Austen Ralston) a reçu l’identifiant 121149 (= 121148
++ 1), les pays ne prennent plus que les valeurs AU et US, et
+<code>Gender</code> contient désormais 2 <code>NA</code> (l’ancien
+<code>G</code> et la valeur manquante). Les nouvelles colonnes
+<code>age_embauche</code> et <code>anciennete</code> sont manquantes
+pour les 3 employés sans date d’embauche valide.</p>
+<p>Certaines anomalies de D1 ne faisaient pas partie des corrections
+demandées et <strong>restent donc présentes</strong> : l’identifiant
+120108 toujours attribué à 2 personnes, le salaire manquant (1),
+l’intitulé de poste manquant (1), et les 2 employés embauchés à moins de
+16 ans (voir D3d).</p>
+</div>
+</div>
 </div>
 
 

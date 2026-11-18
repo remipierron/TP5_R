@@ -882,3 +882,97 @@ id_double <- emp$Employee_ID[duplicated(emp$Employee_ID, incomparables = NA)]
 - **salaires aberrants** : `r nrow(emp_sal_bas)` salaires inférieurs à 10 000 (`r paste0(fr(emp_sal_bas$Salary, 0), " pour ", emp_sal_bas$Job_Title, collapse = ", ")`), sans doute un zéro oublié. Le salaire maximal (`r fr(pdg$Salary, 0)`) est élevé mais plausible : c'est celui du `r pdg$Job_Title` ;
 - **dates impossibles** : `r nrow(emp_avant74)` embauches antérieures à la création de l'enseigne en 1974 (`r paste(format(emp_avant74$embauche, "%d/%m/%Y"), collapse = " et ")`), dont `r anomalies$nb_lignes[12]` avant même la naissance de l'employé ; et `r nrow(emp_moins16)` employés embauchés avant 16 ans (`r paste0(fr(emp_moins16$age_emb), " ans", collapse = " et ")`), ce qui est douteux ;
 - **types** : les deux colonnes de dates sont stockées en texte et devront être converties.
+
+## D2
+
+### Pipeline de correction
+
+```{r D2}
+id_max <- max(emp$Employee_ID, na.rm = TRUE)   # plus grand identifiant existant
+
+emp_propre <- emp |>
+  mutate(
+    # Pays : "au" / "us" -> "AU" / "US"
+    Country = toupper(Country),
+
+    # Genre : tout ce qui n'est pas F ou M ("G", valeur vide) devient NA
+    Gender = if_else(Gender %in% c("F", "M"), Gender, NA),
+
+    # Salaires < 10 000 : un zéro a manifestement été oublié à la saisie
+    Salary = if_else(Salary < 10000, Salary * 10, Salary),
+
+    # Texte "jj/mm/aaaa" -> Date
+    Birth_Date = dmy(Birth_Date),
+    Hire_Date  = dmy(Hire_Date),
+
+    # Embauche avant la création de l'enseigne (1974) : impossible -> NA
+    Hire_Date = if_else(Hire_Date < as.Date("1974-01-01"), NA, Hire_Date),
+
+    # Employé sans identifiant : plus grand identifiant existant + 1
+    Employee_ID = if_else(is.na(Employee_ID), id_max + 1, Employee_ID),
+
+    # Âge à l'embauche en années révolues : nombre d'années complètes
+    # écoulées entre la naissance et l'embauche
+    age_embauche = interval(Birth_Date, Hire_Date) %/% years(1),
+
+    # Ancienneté au 31/12/2007, en années complètes
+    anciennete = interval(Hire_Date, as.Date("2007-12-31")) %/% years(1)
+  )
+
+glimpse(emp_propre)
+```
+
+`interval(debut, fin) %/% years(1)` (lubridate) compte le nombre d'années **entières** entre deux dates, en tenant compte des années bissextiles et du jour d'anniversaire : c'est exactement l'âge « révolu ». Un simple `(fin - debut) / 365.25` donnerait un nombre décimal légèrement imprécis autour des anniversaires.
+
+### Vérification : les anomalies de D1 ont-elles disparu ?
+
+```{r D2-verif}
+verif <- tibble(
+  anomalie = c(
+    "Employee_ID manquant",
+    "Gender autre que F / M / NA",
+    "Country en minuscules",
+    "Salary < 10 000",
+    "Hire_Date antérieure à 1974",
+    "Embauche avant la naissance",
+    "Colonnes de dates stockées en texte"
+  ),
+  avant = c(
+    sum(is.na(emp$Employee_ID)),
+    sum(!emp$Gender %in% c("F", "M") & !is.na(emp$Gender)),
+    sum(emp$Country != toupper(emp$Country)),
+    sum(emp$Salary < 10000, na.rm = TRUE),
+    sum(emp_dates$embauche < as.Date("1974-01-01"), na.rm = TRUE),
+    sum(emp_dates$embauche < emp_dates$naissance, na.rm = TRUE),
+    sum(sapply(emp[c("Birth_Date", "Hire_Date")], is.character))
+  ),
+  apres = c(
+    sum(is.na(emp_propre$Employee_ID)),
+    sum(!emp_propre$Gender %in% c("F", "M") & !is.na(emp_propre$Gender)),
+    sum(emp_propre$Country != toupper(emp_propre$Country)),
+    sum(emp_propre$Salary < 10000, na.rm = TRUE),
+    sum(emp_propre$Hire_Date < as.Date("1974-01-01"), na.rm = TRUE),
+    sum(emp_propre$Hire_Date < emp_propre$Birth_Date, na.rm = TRUE),
+    sum(sapply(emp_propre[c("Birth_Date", "Hire_Date")], is.character))
+  )
+)
+knitr::kable(verif, col.names = c("Anomalie", "Avant", "Après"))
+
+# Contrôles complémentaires
+table(emp_propre$Country)
+table(emp_propre$Gender, useNA = "ifany")
+emp_propre |> filter(Employee_ID == id_max + 1) |> select(Employee_ID, First, Last)
+emp_propre |> filter(Salary %in% (emp$Salary[emp$Salary < 10000 & !is.na(emp$Salary)] * 10)) |>
+  select(Employee_ID, Job_Title, Salary)
+summary(emp_propre$age_embauche)
+summary(emp_propre$anciennete)
+```
+
+```{r D2-texte, include=FALSE}
+nouvel_id <- emp_propre |> filter(Employee_ID == id_max + 1)
+reste_double <- emp_propre |> count(Employee_ID) |> filter(n > 1)
+```
+
+**Réponse :** `r if (all(verif$apres == 0)) "toutes les anomalies visées par les corrections ont disparu : la colonne « Après » vaut 0 partout." else paste0("attention, il reste des anomalies : ", paste(verif$anomalie[verif$apres > 0], collapse = ", "), ".")` L'employé sans identifiant (`r nouvel_id$First` `r nouvel_id$Last`) a reçu l'identifiant `r format(nouvel_id$Employee_ID, scientific = FALSE)` (= `r format(id_max, scientific = FALSE)` + 1), les pays ne prennent plus que les valeurs `r paste(sort(unique(emp_propre$Country)), collapse = " et ")`, et `Gender` contient désormais `r sum(is.na(emp_propre$Gender))` `NA` (l'ancien `G` et la valeur manquante). Les nouvelles colonnes `age_embauche` et `anciennete` sont manquantes pour les `r sum(is.na(emp_propre$age_embauche))` employés sans date d'embauche valide.
+
+Certaines anomalies de D1 ne faisaient pas partie des corrections demandées et **restent donc présentes** : `r if (nrow(reste_double) > 0) paste0("l'identifiant ", format(reste_double$Employee_ID, scientific = FALSE), " toujours attribué à ", reste_double$n, " personnes, ")`le salaire manquant (`r sum(is.na(emp_propre$Salary))`), l'intitulé de poste manquant (`r sum(is.na(emp_propre$Job_Title))`), et les `r sum(emp_propre$age_embauche < 16, na.rm = TRUE)` employés embauchés à moins de 16 ans (voir D3d).
