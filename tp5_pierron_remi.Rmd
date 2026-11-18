@@ -567,3 +567,64 @@ levels(factor(pays_csv$continent))
 ```
 
 **Réponse :** après `saveRDS()` / `readRDS()`, `continent` est toujours de classe `` `r class(pays_relu$continent)` ``, avec ses `r nlevels(pays_relu$continent)` niveaux dans l'ordre d'origine (`r paste(levels(pays_relu$continent), collapse = ", ")`), et `identical()` renvoie `` `r identical(pays, pays_relu)` `` : le `.rds` conserve l'objet R tel quel. Avec un CSV, qui ne contient que du texte, `continent` redevient une simple chaîne de caractères (`` `r class(pays_csv$continent)` ``) : la notion de facteur et l'ordre des niveaux sont perdus. Il faudrait refaire `factor()` à la relecture, et sans `levels` explicites l'ordre deviendrait alphabétique (`r paste(levels(factor(pays_csv$continent)), collapse = ", ")`) au lieu de l'ordre des codes 1 à 5.
+
+# Partie C : Ranger les données (tidy data)
+
+## C1
+
+### a. `pluie` au format long
+
+Dans `pluie`, les mois sont dans les noms de colonnes : le tableau n'est pas rangé. `pivot_longer()` empile les 12 colonnes de mois en deux colonnes, `mois` (le nom de la colonne) et `mm` (la valeur).
+
+```{r C1a}
+pluie_long <- pluie |>
+  pivot_longer(cols      = janv:déc,   # les 12 colonnes de mois
+               names_to  = "mois",
+               values_to = "mm")
+pluie_long
+class(pluie_long$mois)
+```
+
+**Réponse :** `pluie_long` compte `r nrow(pluie_long)` lignes (`r n_distinct(pluie_long$station)` stations × `r n_distinct(pluie_long$annee)` années × `r n_distinct(pluie_long$mois)` mois) et `r ncol(pluie_long)` colonnes : `r paste0("\x60", names(pluie_long), "\x60", collapse = ", ")`.
+
+### b. `mois` en facteur ordonné selon le calendrier
+
+`mois` est pour l'instant du texte : trié, il suivrait l'ordre alphabétique (`r paste(head(sort(unique(pluie_long$mois)), 4), collapse = ", ")`…). Les colonnes de `pluie` sont déjà dans l'ordre du calendrier : on s'en sert comme niveaux.
+
+```{r C1b}
+ordre_mois <- names(pluie)[-(1:2)]   # tout sauf annee et station : janv ... déc
+ordre_mois
+
+pluie_long <- pluie_long |>
+  mutate(mois = factor(mois, levels = ordre_mois))
+
+levels(pluie_long$mois)
+```
+
+### c. Mois le plus pluvieux de chaque station en 2025
+
+```{r C1c}
+mois_max_2025 <- pluie_long |>
+  filter(annee == 2025) |>
+  slice_max(mm, n = 1, by = station)   # ex aequo éventuels conservés
+mois_max_2025
+```
+
+**Réponse :** en 2025, le mois le plus pluvieux a été : `r paste0(mois_max_2025$mois, " pour ", mois_max_2025$station, " (", mois_max_2025$mm, " mm)", collapse = ", ")`.
+
+### d. Comparaison 2024 / 2025
+
+On repasse au format large avec `pivot_wider()`, en prenant les noms de colonnes dans `annee` : on obtient une ligne par station et par mois, et une colonne par année.
+
+```{r C1d}
+pluie_annees <- pluie_long |>
+  pivot_wider(names_from = annee, values_from = mm) |>
+  mutate(difference = `2025` - `2024`)   # noms numériques : entre backticks
+pluie_annees
+
+# Plus forte hausse
+plus_forte_hausse <- pluie_annees |> slice_max(difference, n = 1)
+plus_forte_hausse
+```
+
+**Réponse :** le tableau a `r nrow(pluie_annees)` lignes (une par station et par mois). La plus forte hausse entre 2024 et 2025 est celle de **`r plus_forte_hausse$station` en `r plus_forte_hausse$mois`** : `r plus_forte_hausse[["2024"]]` mm en 2024 contre `r plus_forte_hausse[["2025"]]` mm en 2025, soit `r plus_forte_hausse$difference` mm de plus (`r fr(plus_forte_hausse[["2025"]] / plus_forte_hausse[["2024"]])` fois plus de pluie).

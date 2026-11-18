@@ -2370,6 +2370,112 @@ refaire <code>factor()</code> à la relecture, et sans
 </div>
 </div>
 </div>
+<div id="partie-c-ranger-les-données-tidy-data" class="section level1">
+<h1>Partie C : Ranger les données (tidy data)</h1>
+<div id="c1" class="section level2">
+<h2>C1</h2>
+<div id="a.-pluie-au-format-long" class="section level3">
+<h3>a. <code>pluie</code> au format long</h3>
+<p>Dans <code>pluie</code>, les mois sont dans les noms de colonnes : le
+tableau n’est pas rangé. <code>pivot_longer()</code> empile les 12
+colonnes de mois en deux colonnes, <code>mois</code> (le nom de la
+colonne) et <code>mm</code> (la valeur).</p>
+<pre class="r"><code>pluie_long &lt;- pluie |&gt;
+  pivot_longer(cols      = janv:déc,   # les 12 colonnes de mois
+               names_to  = &quot;mois&quot;,
+               values_to = &quot;mm&quot;)
+pluie_long</code></pre>
+<pre><code>## # A tibble: 96 × 4
+##    annee station mois     mm
+##    &lt;dbl&gt; &lt;chr&gt;   &lt;chr&gt; &lt;dbl&gt;
+##  1  2024 Orléans janv     62
+##  2  2024 Orléans févr     69
+##  3  2024 Orléans mars     15
+##  4  2024 Orléans avr      43
+##  5  2024 Orléans mai      48
+##  6  2024 Orléans juin     57
+##  7  2024 Orléans juil     54
+##  8  2024 Orléans août     75
+##  9  2024 Orléans sept     55
+## 10  2024 Orléans oct     137
+## # ℹ 86 more rows</code></pre>
+<pre class="r"><code>class(pluie_long$mois)</code></pre>
+<pre><code>## [1] &quot;character&quot;</code></pre>
+<p><strong>Réponse :</strong> <code>pluie_long</code> compte 96 lignes
+(4 stations × 2 années × 12 mois) et 4 colonnes : <code>annee</code>,
+<code>station</code>, <code>mois</code>, <code>mm</code>.</p>
+</div>
+<div id="b.-mois-en-facteur-ordonné-selon-le-calendrier" class="section level3">
+<h3>b. <code>mois</code> en facteur ordonné selon le calendrier</h3>
+<p><code>mois</code> est pour l’instant du texte : trié, il suivrait
+l’ordre alphabétique (août, avr, déc, févr…). Les colonnes de
+<code>pluie</code> sont déjà dans l’ordre du calendrier : on s’en sert
+comme niveaux.</p>
+<pre class="r"><code>ordre_mois &lt;- names(pluie)[-(1:2)]   # tout sauf annee et station : janv ... déc
+ordre_mois</code></pre>
+<pre><code>##  [1] &quot;janv&quot; &quot;févr&quot; &quot;mars&quot; &quot;avr&quot;  &quot;mai&quot;  &quot;juin&quot; &quot;juil&quot; &quot;août&quot; &quot;sept&quot; &quot;oct&quot; 
+## [11] &quot;nov&quot;  &quot;déc&quot;</code></pre>
+<pre class="r"><code>pluie_long &lt;- pluie_long |&gt;
+  mutate(mois = factor(mois, levels = ordre_mois))
+
+levels(pluie_long$mois)</code></pre>
+<pre><code>##  [1] &quot;janv&quot; &quot;févr&quot; &quot;mars&quot; &quot;avr&quot;  &quot;mai&quot;  &quot;juin&quot; &quot;juil&quot; &quot;août&quot; &quot;sept&quot; &quot;oct&quot; 
+## [11] &quot;nov&quot;  &quot;déc&quot;</code></pre>
+</div>
+<div id="c.-mois-le-plus-pluvieux-de-chaque-station-en-2025" class="section level3">
+<h3>c. Mois le plus pluvieux de chaque station en 2025</h3>
+<pre class="r"><code>mois_max_2025 &lt;- pluie_long |&gt;
+  filter(annee == 2025) |&gt;
+  slice_max(mm, n = 1, by = station)   # ex aequo éventuels conservés
+mois_max_2025</code></pre>
+<pre><code>## # A tibble: 4 × 4
+##   annee station       mois     mm
+##   &lt;dbl&gt; &lt;chr&gt;         &lt;fct&gt; &lt;dbl&gt;
+## 1  2025 Orléans       juil    139
+## 2  2025 Besançon      janv    220
+## 3  2025 Nîmes         janv     79
+## 4  2025 Saint-Étienne nov      97</code></pre>
+<p><strong>Réponse :</strong> en 2025, le mois le plus pluvieux a été :
+juil pour Orléans (139 mm), janv pour Besançon (220 mm), janv pour Nîmes
+(79 mm), nov pour Saint-Étienne (97 mm).</p>
+</div>
+<div id="d.-comparaison-2024-2025" class="section level3">
+<h3>d. Comparaison 2024 / 2025</h3>
+<p>On repasse au format large avec <code>pivot_wider()</code>, en
+prenant les noms de colonnes dans <code>annee</code> : on obtient une
+ligne par station et par mois, et une colonne par année.</p>
+<pre class="r"><code>pluie_annees &lt;- pluie_long |&gt;
+  pivot_wider(names_from = annee, values_from = mm) |&gt;
+  mutate(difference = `2025` - `2024`)   # noms numériques : entre backticks
+pluie_annees</code></pre>
+<pre><code>## # A tibble: 48 × 5
+##    station mois  `2024` `2025` difference
+##    &lt;chr&gt;   &lt;fct&gt;  &lt;dbl&gt;  &lt;dbl&gt;      &lt;dbl&gt;
+##  1 Orléans janv      62     20        -42
+##  2 Orléans févr      69     29        -40
+##  3 Orléans mars      15     71         56
+##  4 Orléans avr       43     96         53
+##  5 Orléans mai       48     81         33
+##  6 Orléans juin      57     99         42
+##  7 Orléans juil      54    139         85
+##  8 Orléans août      75     71         -4
+##  9 Orléans sept      55     55          0
+## 10 Orléans oct      137     87        -50
+## # ℹ 38 more rows</code></pre>
+<pre class="r"><code># Plus forte hausse
+plus_forte_hausse &lt;- pluie_annees |&gt; slice_max(difference, n = 1)
+plus_forte_hausse</code></pre>
+<pre><code>## # A tibble: 1 × 5
+##   station  mois  `2024` `2025` difference
+##   &lt;chr&gt;    &lt;fct&gt;  &lt;dbl&gt;  &lt;dbl&gt;      &lt;dbl&gt;
+## 1 Besançon janv      66    220        154</code></pre>
+<p><strong>Réponse :</strong> le tableau a 48 lignes (une par station et
+par mois). La plus forte hausse entre 2024 et 2025 est celle de
+<strong>Besançon en janv</strong> : 66 mm en 2024 contre 220 mm en 2025,
+soit 154 mm de plus (3,3 fois plus de pluie).</p>
+</div>
+</div>
+</div>
 
 
 
