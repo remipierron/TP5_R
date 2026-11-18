@@ -1,0 +1,79 @@
+---
+title: "TP 5 : Importer, ranger et nettoyer des données"
+author: "Rémi Pierron"
+date: "2026-11-18"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readxl)
+```
+
+# Partie A : Importer des fichiers texte récalcitrants
+
+## A1
+
+Les cinq fichiers sont des fichiers texte **tabulés** avec un point décimal : on utilise donc `read.delim()`. Avant d'importer, on regarde les premières lignes de chaque fichier avec `readLines()` pour repérer leurs particularités.
+
+```{r A1-apercu}
+readLines("data/auto2004_original.txt", n = 3)
+readLines("data/auto2004_original_ligne3.txt", n = 5, encoding = "latin1")
+readLines("data/auto2004_sans_nom.txt", n = 2)
+readLines("data/auto2004_don_manquante.txt", n = 3)
+readLines("data/auto2004_don_manquan_99999.txt", n = 3)
+```
+
+Constats :
+
+- `auto2004_original_ligne3.txt` : 3 lignes de description avant l'en-tête, et des accents encodés en latin1 (« caractère ») ;
+- `auto2004_sans_nom.txt` : pas de ligne d'en-tête, la première ligne est déjà une voiture ;
+- `auto2004_don_manquante.txt` : les valeurs manquantes sont des cases vides ;
+- `auto2004_don_manquan_99999.txt` : les valeurs manquantes sont codées `99999` (sauf une case vide, la longueur de la Bentley).
+
+```{r A1-import}
+# a. Référence
+ref <- read.delim("data/auto2004_original.txt")
+
+# b. 3 lignes de description à sauter, fichier encodé en latin1
+l3 <- read.delim("data/auto2004_original_ligne3.txt",
+                 skip = 3, fileEncoding = "latin1")
+
+# c. Pas d'en-tête : on reprend les noms de colonnes de la référence
+sn <- read.delim("data/auto2004_sans_nom.txt",
+                 header = FALSE, col.names = names(ref))
+
+# d. Cases vides : converties en NA automatiquement dans les colonnes numériques
+dm <- read.delim("data/auto2004_don_manquante.txt")
+
+# e. 99999 est un code de valeur manquante
+d99 <- read.delim("data/auto2004_don_manquan_99999.txt", na.strings = "99999")
+
+str(ref)
+```
+
+Pour vérifier chaque import en **une** instruction, on compare en même temps les noms, les dimensions et les types (classe de chaque colonne) avec ceux de `ref` :
+
+```{r A1-verif}
+identical(list(names(l3),  dim(l3),  sapply(l3,  class)),
+          list(names(ref), dim(ref), sapply(ref, class)))
+identical(list(names(sn),  dim(sn),  sapply(sn,  class)),
+          list(names(ref), dim(ref), sapply(ref, class)))
+identical(list(names(dm),  dim(dm),  sapply(dm,  class)),
+          list(names(ref), dim(ref), sapply(ref, class)))
+identical(list(names(d99), dim(d99), sapply(d99, class)),
+          list(names(ref), dim(ref), sapply(ref, class)))
+```
+
+Pour les deux fichiers sans valeurs manquantes, on peut même vérifier que le contenu est strictement identique :
+
+```{r A1-verif-valeurs}
+all.equal(l3, ref)
+all.equal(sn, ref)
+```
+
+**Réponse :** les quatre imports renvoient `TRUE` : ils ont les mêmes noms, les mêmes dimensions (24 lignes, 7 colonnes) et les mêmes types (`Modele` en `character`, les 6 autres colonnes en `integer`) que la référence. Il a fallu `skip = 3` et `fileEncoding = "latin1"` pour le fichier avec description, `header = FALSE` et `col.names = names(ref)` pour le fichier sans en-tête, et `na.strings = "99999"` pour le fichier où les manquantes sont codées 99999 (sans cet argument les colonnes resteraient numériques mais contiendraient des valeurs aberrantes). Les fichiers `l3` et `sn` sont de plus identiques à `ref` en valeurs ; `dm` et `d99` ne diffèrent que par leurs valeurs manquantes.
