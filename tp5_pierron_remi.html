@@ -2007,6 +2007,117 @@ réplique), et les trois tableaux ont les mêmes valeurs (à la classe près
 </div>
 </div>
 </div>
+<div id="partie-b-excel-sas-et-export" class="section level1">
+<h1>Partie B : Excel, SAS et export</h1>
+<div id="b1" class="section level2">
+<h2>B1</h2>
+<div id="a.-feuilles-du-classeur-et-début-du-tableau" class="section level3">
+<h3>a. Feuilles du classeur et début du tableau</h3>
+<pre class="r"><code>fichier_pluie &lt;- &quot;data/pluie_mensuelle.xlsx&quot;
+feuilles &lt;- excel_sheets(fichier_pluie)
+feuilles</code></pre>
+<pre><code>## [1] &quot;2024&quot; &quot;2025&quot;</code></pre>
+<pre class="r"><code># Aperçu brut de la première feuille, sans en-tête, pour voir où commence le tableau
+brut_pluie &lt;- read_excel(fichier_pluie, sheet = feuilles[1],
+                         col_names = FALSE, .name_repair = &quot;minimal&quot;)
+brut_pluie[, 1:4]</code></pre>
+<pre><code>## # A tibble: 8 × 4
+##   ``                                 ``    ``    ``   
+##   &lt;chr&gt;                              &lt;chr&gt; &lt;chr&gt; &lt;chr&gt;
+## 1 Cumul de pluie mensuel (mm) - 2024 &lt;NA&gt;  &lt;NA&gt;  &lt;NA&gt; 
+## 2 Source : réseau fictif             &lt;NA&gt;  &lt;NA&gt;  &lt;NA&gt; 
+## 3 &lt;NA&gt;                               &lt;NA&gt;  &lt;NA&gt;  &lt;NA&gt; 
+## 4 station                            janv  févr  mars 
+## 5 Orléans                            62    69    15   
+## 6 Besançon                           66    18    28   
+## 7 Nîmes                              78    78    27   
+## 8 Saint-Étienne                      80    52    69</code></pre>
+<pre class="r"><code># Ligne où se trouve l&#39;en-tête &quot;station&quot;
+ligne_entete &lt;- which(brut_pluie[[1]] == &quot;station&quot;)
+ligne_entete</code></pre>
+<pre><code>## [1] 4</code></pre>
+<p><strong>Réponse :</strong> le classeur contient 2 feuilles, une par
+année : 2024 et 2025. Dans chaque feuille, les premières lignes ne font
+pas partie du tableau : un titre (« Cumul de pluie mensuel (mm) - 2024
+»), une source (« Source : réseau fictif ») puis une ligne vide. Le
+tableau commence à la <strong>ligne 4</strong> (cellule
+<code>A4</code>), qui contient l’en-tête <code>station</code>,
+<code>janv</code>, …, <code>déc</code>. Il faut donc sauter <strong>3
+lignes</strong> à l’import (<code>skip = 3</code>).</p>
+</div>
+<div id="b.-import-des-deux-feuilles-et-empilement" class="section level3">
+<h3>b. Import des deux feuilles et empilement</h3>
+<p>On lit chaque feuille avec le même <code>skip</code>, dans une liste
+nommée par l’année, puis <code>bind_rows(.id = &quot;annee&quot;)</code> empile
+les tableaux en ajoutant une colonne qui indique la feuille
+d’origine.</p>
+<pre class="r"><code>liste_pluie &lt;- lapply(feuilles, function(f) {
+  read_excel(fichier_pluie, sheet = f, skip = ligne_entete - 1)
+})
+names(liste_pluie) &lt;- feuilles
+
+# Les deux feuilles ont-elles les mêmes colonnes ?
+identical(names(liste_pluie[[1]]), names(liste_pluie[[2]]))</code></pre>
+<pre><code>## [1] TRUE</code></pre>
+<pre class="r"><code>pluie &lt;- bind_rows(liste_pluie, .id = &quot;annee&quot;) |&gt;
+  mutate(annee = as.numeric(annee))   # le nom de la feuille est du texte : on le convertit
+
+pluie</code></pre>
+<pre><code>## # A tibble: 8 × 14
+##   annee station       janv  févr  mars   avr   mai  juin  juil  août  sept   oct
+##   &lt;dbl&gt; &lt;chr&gt;        &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;
+## 1  2024 Orléans         62    69    15    43    48    57    54    75    55   137
+## 2  2024 Besançon        66    18    28    48    47    59    56    83    75    66
+## 3  2024 Nîmes           78    78    27    26    55    67   140    40    71    36
+## 4  2024 Saint-Étien…    80    52    69    58    70    17    31    58    41    59
+## 5  2025 Orléans         20    29    71    96    81    99   139    71    55    87
+## 6  2025 Besançon       220    34    28    57    31    45    13    46    35    45
+## 7  2025 Nîmes           79     9    36    31    22    25    54    52    29    28
+## 8  2025 Saint-Étien…    72    78    41    56    65    36    16    35    78    39
+## # ℹ 2 more variables: nov &lt;dbl&gt;, déc &lt;dbl&gt;</code></pre>
+<pre class="r"><code>class(pluie$annee)</code></pre>
+<pre><code>## [1] &quot;numeric&quot;</code></pre>
+<p><strong>Réponse :</strong> <code>pluie</code> est un tibble de 8
+lignes (4 stations × 2 années) et 14 colonnes : <code>annee</code> (de
+classe <code>numeric</code>), <code>station</code> et les 12 mois.</p>
+</div>
+<div id="c.-cumul-annuel-par-station" class="section level3">
+<h3>c. Cumul annuel par station</h3>
+<p>On additionne les 12 colonnes de mois ligne par ligne avec
+<code>rowSums()</code>.</p>
+<pre class="r"><code>cumul_annuel &lt;- pluie |&gt;
+  mutate(cumul = rowSums(across(janv:déc), na.rm = TRUE)) |&gt;
+  select(annee, station, cumul)
+cumul_annuel</code></pre>
+<pre><code>## # A tibble: 8 × 3
+##   annee station       cumul
+##   &lt;dbl&gt; &lt;chr&gt;         &lt;dbl&gt;
+## 1  2024 Orléans         663
+## 2  2024 Besançon        626
+## 3  2024 Nîmes           674
+## 4  2024 Saint-Étienne   651
+## 5  2025 Orléans         863
+## 6  2025 Besançon        753
+## 7  2025 Nîmes           419
+## 8  2025 Saint-Étienne   677</code></pre>
+<pre class="r"><code># Présentation plus lisible : une colonne par année
+cumul_large &lt;- cumul_annuel |&gt;
+  pivot_wider(names_from = annee, values_from = cumul)
+cumul_large</code></pre>
+<pre><code>## # A tibble: 4 × 3
+##   station       `2024` `2025`
+##   &lt;chr&gt;          &lt;dbl&gt;  &lt;dbl&gt;
+## 1 Orléans          663    863
+## 2 Besançon         626    753
+## 3 Nîmes            674    419
+## 4 Saint-Étienne    651    677</code></pre>
+<p><strong>Réponse :</strong> les cumuls annuels sont donnés dans le
+tableau ci-dessus. En 2024, la station la plus arrosée est Nîmes (674
+mm) et la moins arrosée Besançon (626 mm). En 2025, la station la plus
+arrosée est Orléans (863 mm) et la moins arrosée Nîmes (419 mm).</p>
+</div>
+</div>
+</div>
 
 
 

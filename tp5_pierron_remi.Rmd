@@ -343,3 +343,71 @@ same_23 <- isTRUE(all.equal(p2, as.data.frame(p3), check.attributes = FALSE))
 ```
 
 **Réponse :** les trois erreurs sont : `p1` utilise le mauvais séparateur et la mauvaise décimale (il faut `read.csv2()` ou `sep = ";", dec = ","`) ; `p2` ne déclare pas le code `n/a` (il faut `na.strings = "n/a"`) ; `p3` saute à tort la ligne d'en-tête avec `skip = 1`. Une fois corrigés, les trois imports ont `r nrow(p1)` lignes et `r ncol(p1)` colonnes, `prix` et `stock` sont numériques avec `r sum(is.na(p1$stock))` stock manquant (`r p1$produit[is.na(p1$stock)]`), et `r if (same_12 && same_23) "les trois tableaux ont les mêmes valeurs" else "les tableaux diffèrent encore"` (à la classe près : `p3` est un tibble et son `stock` est de type `` `r typeof(p3$stock)` `` alors qu'il est de type `` `r typeof(p2$stock)` `` dans `p2`).
+
+# Partie B : Excel, SAS et export
+
+## B1
+
+### a. Feuilles du classeur et début du tableau
+
+```{r B1a}
+fichier_pluie <- "data/pluie_mensuelle.xlsx"
+feuilles <- excel_sheets(fichier_pluie)
+feuilles
+
+# Aperçu brut de la première feuille, sans en-tête, pour voir où commence le tableau
+brut_pluie <- read_excel(fichier_pluie, sheet = feuilles[1],
+                         col_names = FALSE, .name_repair = "minimal")
+brut_pluie[, 1:4]
+
+# Ligne où se trouve l'en-tête "station"
+ligne_entete <- which(brut_pluie[[1]] == "station")
+ligne_entete
+```
+
+**Réponse :** le classeur contient `r length(feuilles)` feuilles, une par année : `r paste(feuilles, collapse = " et ")`. Dans chaque feuille, les premières lignes ne font pas partie du tableau : un titre (« `r brut_pluie[[1]][1]` »), une source (« `r brut_pluie[[1]][2]` ») puis une ligne vide. Le tableau commence à la **ligne `r ligne_entete`** (cellule `A`r ligne_entete``), qui contient l'en-tête `station`, `janv`, …, `déc`. Il faut donc sauter **`r ligne_entete - 1` lignes** à l'import (`skip = `r ligne_entete - 1``).
+
+### b. Import des deux feuilles et empilement
+
+On lit chaque feuille avec le même `skip`, dans une liste nommée par l'année, puis `bind_rows(.id = "annee")` empile les tableaux en ajoutant une colonne qui indique la feuille d'origine.
+
+```{r B1b}
+liste_pluie <- lapply(feuilles, function(f) {
+  read_excel(fichier_pluie, sheet = f, skip = ligne_entete - 1)
+})
+names(liste_pluie) <- feuilles
+
+# Les deux feuilles ont-elles les mêmes colonnes ?
+identical(names(liste_pluie[[1]]), names(liste_pluie[[2]]))
+
+pluie <- bind_rows(liste_pluie, .id = "annee") |>
+  mutate(annee = as.numeric(annee))   # le nom de la feuille est du texte : on le convertit
+
+pluie
+class(pluie$annee)
+```
+
+**Réponse :** `pluie` est un tibble de `r nrow(pluie)` lignes (`r n_distinct(pluie$station)` stations × `r n_distinct(pluie$annee)` années) et `r ncol(pluie)` colonnes : `annee` (de classe `` `r class(pluie$annee)` ``), `station` et les 12 mois.
+
+### c. Cumul annuel par station
+
+On additionne les 12 colonnes de mois ligne par ligne avec `rowSums()`.
+
+```{r B1c}
+cumul_annuel <- pluie |>
+  mutate(cumul = rowSums(across(janv:déc), na.rm = TRUE)) |>
+  select(annee, station, cumul)
+cumul_annuel
+
+# Présentation plus lisible : une colonne par année
+cumul_large <- cumul_annuel |>
+  pivot_wider(names_from = annee, values_from = cumul)
+cumul_large
+```
+
+```{r B1c-texte, include=FALSE}
+max_par_annee <- cumul_annuel |> slice_max(cumul, n = 1, by = annee)
+min_par_annee <- cumul_annuel |> slice_min(cumul, n = 1, by = annee)
+```
+
+**Réponse :** les cumuls annuels sont donnés dans le tableau ci-dessus. `r paste0("En ", max_par_annee$annee, ", la station la plus arrosée est ", max_par_annee$station, " (", fr(max_par_annee$cumul, 0), " mm) et la moins arrosée ", min_par_annee$station, " (", fr(min_par_annee$cumul, 0), " mm)", collapse = ". ")`.
