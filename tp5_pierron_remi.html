@@ -1875,6 +1875,137 @@ est : Orléans le 15/01/2026 (-5,4 °C), Besançon le 26/01/2026 (-5,1 °C),
 Nîmes le 29/01/2026 (0,1 °C), Saint-Étienne le 02/01/2026 (-5,6 °C).</p>
 </div>
 </div>
+<div id="a5" class="section level2">
+<h2>A5</h2>
+<p>Les trois instructions à déboguer (non exécutées ici) :</p>
+<pre class="r"><code>p1 &lt;- read.csv(&quot;data/prix_fr.csv&quot;)
+p2 &lt;- read.csv2(&quot;data/prix_fr.csv&quot;)
+p3 &lt;- read_csv2(&quot;data/prix_fr.csv&quot;, na = &quot;n/a&quot;, skip = 1)</code></pre>
+<div id="diagnostic-sans-exécuter" class="section level3">
+<h3>Diagnostic sans exécuter</h3>
+<p>Le fichier <code>prix_fr.csv</code> est un CSV « à la française » :
+séparateur <code>;</code>, virgule décimale, une ligne d’en-tête, et un
+stock manquant codé <code>n/a</code> (voir le cours, diapo « Avant
+d’importer »).</p>
+<ul>
+<li><strong><code>p1</code></strong> : <code>read.csv()</code> attend un
+séparateur <code>,</code> et un point décimal. Le <code>;</code> n’est
+pas reconnu, donc l’en-tête <code>produit;prix;stock;categorie</code>
+devient <strong>une seule colonne</strong>. En plus, la virgule décimale
+des prix (<code>24,90</code>) est prise pour un séparateur : chaque
+ligne est coupée en deux au milieu du prix.</li>
+<li><strong><code>p2</code></strong> : <code>read.csv2()</code> est la
+bonne fonction (<code>;</code> et <code>,</code>), mais le code
+<code>n/a</code> n’est pas déclaré comme valeur manquante. Une colonne
+numérique qui contient du texte est lue entièrement en texte :
+<strong><code>stock</code> sera de type <code>character</code></strong>
+au lieu d’entier.</li>
+<li><strong><code>p3</code></strong> : <code>na = &quot;n/a&quot;</code> est
+correct, mais <strong><code>skip = 1</code> saute la ligne
+d’en-tête</strong>. La première ligne de données (« Raquette junior »)
+sert alors de noms de colonnes : on perd une ligne et les colonnes
+portent des noms absurdes (<code>Raquette junior</code>,
+<code>24,90</code>…). De plus, <code>na = &quot;n/a&quot;</code> remplace la
+valeur par défaut <code>c(&quot;&quot;, &quot;NA&quot;)</code> : les cases vides ne seraient
+plus des <code>NA</code>.</li>
+</ul>
+</div>
+<div id="vérification" class="section level3">
+<h3>Vérification</h3>
+<pre class="r"><code>readLines(&quot;data/prix_fr.csv&quot;)   # le fichier brut</code></pre>
+<pre><code>## [1] &quot;produit;prix;stock;categorie&quot;        &quot;Raquette junior;24,90;12;tennis&quot;    
+## [3] &quot;Ballon taille 5;18,50;40;football&quot;   &quot;Maillot réplique;59,99;n/a;football&quot;
+## [5] &quot;Chaussures trail;89,00;7;running&quot;    &quot;Gourde isotherme;14,95;25;running&quot;</code></pre>
+<pre class="r"><code>p1 &lt;- read.csv(&quot;data/prix_fr.csv&quot;)
+str(p1)</code></pre>
+<pre><code>## &#39;data.frame&#39;:    5 obs. of  1 variable:
+##  $ produit.prix.stock.categorie: chr  &quot;90;12;tennis&quot; &quot;50;40;football&quot; &quot;99;n/a;football&quot; &quot;00;7;running&quot; ...</code></pre>
+<pre class="r"><code>rownames(p1)                    # le début de chaque ligne est devenu un nom de ligne</code></pre>
+<pre><code>## [1] &quot;Raquette junior;24&quot;  &quot;Ballon taille 5;18&quot;  &quot;Maillot réplique;59&quot;
+## [4] &quot;Chaussures trail;89&quot; &quot;Gourde isotherme;14&quot;</code></pre>
+<pre class="r"><code>p2 &lt;- read.csv2(&quot;data/prix_fr.csv&quot;)
+str(p2)</code></pre>
+<pre><code>## &#39;data.frame&#39;:    5 obs. of  4 variables:
+##  $ produit  : chr  &quot;Raquette junior&quot; &quot;Ballon taille 5&quot; &quot;Maillot réplique&quot; &quot;Chaussures trail&quot; ...
+##  $ prix     : num  24.9 18.5 60 89 14.9
+##  $ stock    : chr  &quot;12&quot; &quot;40&quot; &quot;n/a&quot; &quot;7&quot; ...
+##  $ categorie: chr  &quot;tennis&quot; &quot;football&quot; &quot;football&quot; &quot;running&quot; ...</code></pre>
+<pre class="r"><code>p3 &lt;- read_csv2(&quot;data/prix_fr.csv&quot;, na = &quot;n/a&quot;, skip = 1, show_col_types = FALSE)</code></pre>
+<pre><code>## ℹ Using &quot;&#39;,&#39;&quot; as decimal and &quot;&#39;.&#39;&quot; as grouping mark. Use `read_delim()` for more control.</code></pre>
+<pre class="r"><code>p3</code></pre>
+<pre><code>## # A tibble: 4 × 4
+##   `Raquette junior` `24,90`  `12` tennis  
+##   &lt;chr&gt;               &lt;dbl&gt; &lt;dbl&gt; &lt;chr&gt;   
+## 1 Ballon taille 5      18.5    40 football
+## 2 Maillot réplique     60.0    NA football
+## 3 Chaussures trail     89       7 running 
+## 4 Gourde isotherme     15.0    25 running</code></pre>
+<p>Les résultats confirment le diagnostic :</p>
+<ul>
+<li><code>p1</code> n’a que <strong>1 colonne</strong>
+(<code>produit.prix.stock.categorie</code>) ; comme les lignes de
+données ont un champ de plus que l’en-tête (à cause de la virgule des
+prix), <code>read.csv()</code> a même utilisé le premier morceau
+(<code>Raquette junior;24</code>) comme <strong>nom de ligne</strong>
+;</li>
+<li>dans <code>p2</code>, <code>stock</code> est de classe
+<strong><code>character</code></strong> ;</li>
+<li><code>p3</code> n’a que <strong>4 lignes</strong> au lieu de 5, et
+ses noms de colonnes sont <code>Raquette junior</code>,
+<code>24,90</code>, <code>12</code>, <code>tennis</code>.</li>
+</ul>
+</div>
+<div id="correction" class="section level3">
+<h3>Correction</h3>
+<pre class="r"><code># p1 : bonne fonction pour un CSV français + code n/a
+p1 &lt;- read.csv(&quot;data/prix_fr.csv&quot;, sep = &quot;;&quot;, dec = &quot;,&quot;, na.strings = &quot;n/a&quot;)
+
+# p2 : on déclare le code de valeur manquante
+p2 &lt;- read.csv2(&quot;data/prix_fr.csv&quot;, na.strings = &quot;n/a&quot;)
+
+# p3 : pas de skip, et on garde les codes NA par défaut en plus de &quot;n/a&quot;
+p3 &lt;- read_csv2(&quot;data/prix_fr.csv&quot;, na = c(&quot;&quot;, &quot;NA&quot;, &quot;n/a&quot;), show_col_types = FALSE)</code></pre>
+<pre><code>## ℹ Using &quot;&#39;,&#39;&quot; as decimal and &quot;&#39;.&#39;&quot; as grouping mark. Use `read_delim()` for more control.</code></pre>
+<pre class="r"><code>str(p1)</code></pre>
+<pre><code>## &#39;data.frame&#39;:    5 obs. of  4 variables:
+##  $ produit  : chr  &quot;Raquette junior&quot; &quot;Ballon taille 5&quot; &quot;Maillot réplique&quot; &quot;Chaussures trail&quot; ...
+##  $ prix     : num  24.9 18.5 60 89 14.9
+##  $ stock    : int  12 40 NA 7 25
+##  $ categorie: chr  &quot;tennis&quot; &quot;football&quot; &quot;football&quot; &quot;running&quot; ...</code></pre>
+<pre class="r"><code>str(p2)</code></pre>
+<pre><code>## &#39;data.frame&#39;:    5 obs. of  4 variables:
+##  $ produit  : chr  &quot;Raquette junior&quot; &quot;Ballon taille 5&quot; &quot;Maillot réplique&quot; &quot;Chaussures trail&quot; ...
+##  $ prix     : num  24.9 18.5 60 89 14.9
+##  $ stock    : int  12 40 NA 7 25
+##  $ categorie: chr  &quot;tennis&quot; &quot;football&quot; &quot;football&quot; &quot;running&quot; ...</code></pre>
+<pre class="r"><code>p3</code></pre>
+<pre><code>## # A tibble: 5 × 4
+##   produit           prix stock categorie
+##   &lt;chr&gt;            &lt;dbl&gt; &lt;dbl&gt; &lt;chr&gt;    
+## 1 Raquette junior   24.9    12 tennis   
+## 2 Ballon taille 5   18.5    40 football 
+## 3 Maillot réplique  60.0    NA football 
+## 4 Chaussures trail  89       7 running  
+## 5 Gourde isotherme  15.0    25 running</code></pre>
+<pre class="r"><code># Les trois imports donnent-ils le même tableau ? (p3 est un tibble, stock y est en double)
+all.equal(p1, p2)</code></pre>
+<pre><code>## [1] TRUE</code></pre>
+<pre class="r"><code>all.equal(p2, as.data.frame(p3), check.attributes = FALSE)</code></pre>
+<pre><code>## [1] TRUE</code></pre>
+<p><strong>Réponse :</strong> les trois erreurs sont : <code>p1</code>
+utilise le mauvais séparateur et la mauvaise décimale (il faut
+<code>read.csv2()</code> ou <code>sep = &quot;;&quot;, dec = &quot;,&quot;</code>) ;
+<code>p2</code> ne déclare pas le code <code>n/a</code> (il faut
+<code>na.strings = &quot;n/a&quot;</code>) ; <code>p3</code> saute à tort la ligne
+d’en-tête avec <code>skip = 1</code>. Une fois corrigés, les trois
+imports ont 5 lignes et 4 colonnes, <code>prix</code> et
+<code>stock</code> sont numériques avec 1 stock manquant (Maillot
+réplique), et les trois tableaux ont les mêmes valeurs (à la classe près
+: <code>p3</code> est un tibble et son <code>stock</code> est de type
+<code>double</code> alors qu’il est de type <code>integer</code> dans
+<code>p2</code>).</p>
+</div>
+</div>
 </div>
 
 
