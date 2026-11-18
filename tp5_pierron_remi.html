@@ -2258,6 +2258,117 @@ plutôt que d’en choisir un arbitrairement. 5 de ces 7 pays sont en
 Afrique.</p>
 </div>
 </div>
+<div id="b3" class="section level2">
+<h2>B3</h2>
+<p>Tous les fichiers produits vont dans le dossier
+<code>sorties/</code>, qui est ignoré par git (voir
+<code>.gitignore</code>).</p>
+<pre class="r"><code>dir.create(&quot;sorties&quot;, showWarnings = FALSE)</code></pre>
+<div id="a.-export-de-bilan_meteo-en-csv-à-la-française" class="section level3">
+<h3>a. Export de <code>bilan_meteo</code> en CSV « à la française »</h3>
+<p><code>write_csv2()</code> écrit un CSV avec <code>;</code> comme
+séparateur et <code>,</code> comme décimale, lisible directement par un
+Excel français.</p>
+<pre class="r"><code>write_csv2(bilan_meteo, &quot;sorties/bilan_meteo.csv&quot;)
+
+readLines(&quot;sorties/bilan_meteo.csv&quot;)   # contenu brut du fichier</code></pre>
+<pre><code>## [1] &quot;station;temp_min_moy;temp_max_moy;pluie_cumul;jours_gel;jours_pluie&quot;
+## [2] &quot;Orléans;0,774193548387097;7,06551724137931;50,8;11;11&quot;              
+## [3] &quot;Besançon;-2,316129032258064;3,90666666666667;69,6;28;19&quot;            
+## [4] &quot;Nîmes;5,006451612903226;11,04137931034483;99,0;0;15&quot;                
+## [5] &quot;Saint-Étienne;-1,067741935483871;5,25666666666667;76,1;20;13&quot;</code></pre>
+<pre class="r"><code>bilan_relu &lt;- read_csv2(&quot;sorties/bilan_meteo.csv&quot;, show_col_types = FALSE)</code></pre>
+<pre><code>## ℹ Using &quot;&#39;,&#39;&quot; as decimal and &quot;&#39;.&#39;&quot; as grouping mark. Use `read_delim()` for more control.</code></pre>
+<pre class="r"><code>bilan_relu</code></pre>
+<pre><code>## # A tibble: 4 × 6
+##   station       temp_min_moy temp_max_moy pluie_cumul jours_gel jours_pluie
+##   &lt;chr&gt;                &lt;dbl&gt;        &lt;dbl&gt;       &lt;dbl&gt;     &lt;dbl&gt;       &lt;dbl&gt;
+## 1 Orléans              0.774         7.07        50.8        11          11
+## 2 Besançon            -2.32          3.91        69.6        28          19
+## 3 Nîmes                5.01         11.0         99           0          15
+## 4 Saint-Étienne       -1.07          5.26        76.1        20          13</code></pre>
+<pre class="r"><code># Même tableau ?
+identical(bilan_meteo, bilan_relu)                            # strictement identique ?</code></pre>
+<pre><code>## [1] FALSE</code></pre>
+<pre class="r"><code>all.equal(bilan_meteo, bilan_relu, check.attributes = FALSE)  # mêmes valeurs ?</code></pre>
+<pre><code>## [1] TRUE</code></pre>
+<pre class="r"><code>sapply(bilan_meteo, class)</code></pre>
+<pre><code>##      station temp_min_moy temp_max_moy  pluie_cumul    jours_gel  jours_pluie 
+##  &quot;character&quot;    &quot;numeric&quot;    &quot;numeric&quot;    &quot;numeric&quot;    &quot;integer&quot;    &quot;integer&quot;</code></pre>
+<pre class="r"><code>sapply(bilan_relu, class)</code></pre>
+<pre><code>##      station temp_min_moy temp_max_moy  pluie_cumul    jours_gel  jours_pluie 
+##  &quot;character&quot;    &quot;numeric&quot;    &quot;numeric&quot;    &quot;numeric&quot;    &quot;numeric&quot;    &quot;numeric&quot;</code></pre>
+<pre class="r"><code>max(abs(bilan_meteo$temp_min_moy - bilan_relu$temp_min_moy))  # écart numérique</code></pre>
+<pre><code>## [1] 4.440892e-16</code></pre>
+<p><strong>Réponse :</strong> <code>identical()</code> renvoie
+<code>FALSE</code> : le tableau relu n’est pas strictement le même
+objet. En revanche, <code>all.equal()</code> sans les attributs renvoie
+<code>TRUE</code> : on retrouve les mêmes valeurs, les mêmes noms de
+colonnes et les mêmes stations avec leurs accents. Les différences
+viennent de ce qu’un CSV ne stocke que du texte : les colonnes
+<code>jours_gel</code> et <code>jours_pluie</code> passent de integer à
+numeric (readr lit tout nombre en double), readr ajoute ses propres
+attributs (<code>spec</code>, <code>problems</code>) au tibble relu, et
+les moyennes sont écrites avec 15 chiffres significatifs, d’où un écart
+d’arrondi négligeable (4.4e-16).</p>
+</div>
+<div id="b.-un-seul-fichier-excel-deux-feuilles" class="section level3">
+<h3>b. Un seul fichier Excel, deux feuilles</h3>
+<p><code>writexl::write_xlsx()</code> accepte une <strong>liste
+nommée</strong> de tableaux : chaque élément devient une feuille portant
+son nom.</p>
+<pre class="r"><code>writexl::write_xlsx(list(pluie = pluie, bilan_meteo = bilan_meteo),
+                    &quot;sorties/pluie_et_meteo.xlsx&quot;)
+
+# Vérification : feuilles du classeur et relecture
+excel_sheets(&quot;sorties/pluie_et_meteo.xlsx&quot;)</code></pre>
+<pre><code>## [1] &quot;pluie&quot;       &quot;bilan_meteo&quot;</code></pre>
+<pre class="r"><code>read_excel(&quot;sorties/pluie_et_meteo.xlsx&quot;, sheet = &quot;bilan_meteo&quot;)</code></pre>
+<pre><code>## # A tibble: 4 × 6
+##   station       temp_min_moy temp_max_moy pluie_cumul jours_gel jours_pluie
+##   &lt;chr&gt;                &lt;dbl&gt;        &lt;dbl&gt;       &lt;dbl&gt;     &lt;dbl&gt;       &lt;dbl&gt;
+## 1 Orléans              0.774         7.07        50.8        11          11
+## 2 Besançon            -2.32          3.91        69.6        28          19
+## 3 Nîmes                5.01         11.0         99           0          15
+## 4 Saint-Étienne       -1.07          5.26        76.1        20          13</code></pre>
+<p><strong>Réponse :</strong> le fichier
+<code>sorties/pluie_et_meteo.xlsx</code> contient 2 feuilles : pluie et
+bilan_meteo.</p>
+</div>
+<div id="c.-sauvegarde-de-pays-en-.rds" class="section level3">
+<h3>c. Sauvegarde de <code>pays</code> en <code>.rds</code></h3>
+<pre class="r"><code>saveRDS(pays, &quot;sorties/pays.rds&quot;)
+pays_relu &lt;- readRDS(&quot;sorties/pays.rds&quot;)
+
+class(pays_relu$continent)</code></pre>
+<pre><code>## [1] &quot;factor&quot;</code></pre>
+<pre class="r"><code>levels(pays_relu$continent)</code></pre>
+<pre><code>## [1] &quot;Afrique&quot;   &quot;Asie&quot;      &quot;Amériques&quot; &quot;Europe&quot;    &quot;Océanie&quot;</code></pre>
+<pre class="r"><code>identical(pays, pays_relu)      # l&#39;objet est-il retrouvé à l&#39;identique ?</code></pre>
+<pre><code>## [1] TRUE</code></pre>
+<p>Et avec un CSV :</p>
+<pre class="r"><code>write_csv(pays, &quot;sorties/pays.csv&quot;)
+pays_csv &lt;- read_csv(&quot;sorties/pays.csv&quot;, show_col_types = FALSE)
+
+class(pays_csv$continent)</code></pre>
+<pre><code>## [1] &quot;character&quot;</code></pre>
+<pre class="r"><code># Si on refait un facteur sans préciser les niveaux, ils sont triés par ordre alphabétique
+levels(factor(pays_csv$continent))</code></pre>
+<pre><code>## [1] &quot;Afrique&quot;   &quot;Amériques&quot; &quot;Asie&quot;      &quot;Europe&quot;    &quot;Océanie&quot;</code></pre>
+<p><strong>Réponse :</strong> après <code>saveRDS()</code> /
+<code>readRDS()</code>, <code>continent</code> est toujours de classe
+<code>factor</code>, avec ses 5 niveaux dans l’ordre d’origine (Afrique,
+Asie, Amériques, Europe, Océanie), et <code>identical()</code> renvoie
+<code>TRUE</code> : le <code>.rds</code> conserve l’objet R tel quel.
+Avec un CSV, qui ne contient que du texte, <code>continent</code>
+redevient une simple chaîne de caractères (<code>character</code>) : la
+notion de facteur et l’ordre des niveaux sont perdus. Il faudrait
+refaire <code>factor()</code> à la relecture, et sans
+<code>levels</code> explicites l’ordre deviendrait alphabétique
+(Afrique, Amériques, Asie, Europe, Océanie) au lieu de l’ordre des codes
+1 à 5.</p>
+</div>
+</div>
 </div>
 
 

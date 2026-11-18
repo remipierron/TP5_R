@@ -491,3 +491,79 @@ ex_aequo <- esper_basse$NOM[esper_basse$ESPER == seuil_5]
 ```
 
 **Réponse :** les pays où l'espérance de vie est la plus basse sont `r paste0(esper_basse$NOM, " (", esper_basse$ESPER, " ans)", collapse = ", ")`. `r if (nrow(esper_basse) > 5) paste0("Le tableau compte ", nrow(esper_basse), " pays et non 5, car ", length(ex_aequo), " pays sont ex aequo à la 5e place avec ", seuil_5, " ans (", paste(ex_aequo, collapse = ", "), ") : on les garde tous plutôt que d'en choisir un arbitrairement. ") else ""``r sum(esper_basse$continent == "Afrique")` de ces `r nrow(esper_basse)` pays sont en Afrique.
+
+## B3
+
+Tous les fichiers produits vont dans le dossier `sorties/`, qui est ignoré par git (voir `.gitignore`).
+
+```{r B3-dossier}
+dir.create("sorties", showWarnings = FALSE)
+```
+
+### a. Export de `bilan_meteo` en CSV « à la française »
+
+`write_csv2()` écrit un CSV avec `;` comme séparateur et `,` comme décimale, lisible directement par un Excel français.
+
+```{r B3a}
+write_csv2(bilan_meteo, "sorties/bilan_meteo.csv")
+
+readLines("sorties/bilan_meteo.csv")   # contenu brut du fichier
+
+bilan_relu <- read_csv2("sorties/bilan_meteo.csv", show_col_types = FALSE)
+bilan_relu
+
+# Même tableau ?
+identical(bilan_meteo, bilan_relu)                            # strictement identique ?
+all.equal(bilan_meteo, bilan_relu, check.attributes = FALSE)  # mêmes valeurs ?
+sapply(bilan_meteo, class)
+sapply(bilan_relu, class)
+max(abs(bilan_meteo$temp_min_moy - bilan_relu$temp_min_moy))  # écart numérique
+```
+
+```{r B3a-texte, include=FALSE}
+cl_avant <- sapply(bilan_meteo, class)
+cl_apres <- sapply(bilan_relu, class)
+col_diff <- names(cl_avant)[cl_avant != cl_apres]
+memes_valeurs <- isTRUE(all.equal(bilan_meteo, bilan_relu, check.attributes = FALSE))
+```
+
+**Réponse :** `identical()` renvoie `` `r identical(bilan_meteo, bilan_relu)` `` : le tableau relu n'est pas strictement le même objet. En revanche, `all.equal()` sans les attributs renvoie `` `r memes_valeurs` `` : on retrouve `r if (memes_valeurs) "les mêmes" else "des"` valeurs, les mêmes noms de colonnes et les mêmes stations avec leurs accents. Les différences viennent de ce qu'un CSV ne stocke que du texte : `r if (length(col_diff) > 0) paste0("les colonnes ", paste0("\x60", col_diff, "\x60", collapse = " et "), " passent de ", paste(unique(cl_avant[col_diff]), collapse = "/"), " à ", paste(unique(cl_apres[col_diff]), collapse = "/"), " (readr lit tout nombre en double)") else "les types sont conservés"`, readr ajoute ses propres attributs (`spec`, `problems`) au tibble relu, et les moyennes sont écrites avec 15 chiffres significatifs, d'où un écart d'arrondi négligeable (`r format(max(abs(bilan_meteo$temp_min_moy - bilan_relu$temp_min_moy)), digits = 2)`).
+
+### b. Un seul fichier Excel, deux feuilles
+
+`writexl::write_xlsx()` accepte une **liste nommée** de tableaux : chaque élément devient une feuille portant son nom.
+
+```{r B3b}
+writexl::write_xlsx(list(pluie = pluie, bilan_meteo = bilan_meteo),
+                    "sorties/pluie_et_meteo.xlsx")
+
+# Vérification : feuilles du classeur et relecture
+excel_sheets("sorties/pluie_et_meteo.xlsx")
+read_excel("sorties/pluie_et_meteo.xlsx", sheet = "bilan_meteo")
+```
+
+**Réponse :** le fichier `sorties/pluie_et_meteo.xlsx` contient `r length(excel_sheets("sorties/pluie_et_meteo.xlsx"))` feuilles : `r paste(excel_sheets("sorties/pluie_et_meteo.xlsx"), collapse = " et ")`.
+
+### c. Sauvegarde de `pays` en `.rds`
+
+```{r B3c}
+saveRDS(pays, "sorties/pays.rds")
+pays_relu <- readRDS("sorties/pays.rds")
+
+class(pays_relu$continent)
+levels(pays_relu$continent)
+identical(pays, pays_relu)      # l'objet est-il retrouvé à l'identique ?
+```
+
+Et avec un CSV :
+
+```{r B3c-csv}
+write_csv(pays, "sorties/pays.csv")
+pays_csv <- read_csv("sorties/pays.csv", show_col_types = FALSE)
+
+class(pays_csv$continent)
+# Si on refait un facteur sans préciser les niveaux, ils sont triés par ordre alphabétique
+levels(factor(pays_csv$continent))
+```
+
+**Réponse :** après `saveRDS()` / `readRDS()`, `continent` est toujours de classe `` `r class(pays_relu$continent)` ``, avec ses `r nlevels(pays_relu$continent)` niveaux dans l'ordre d'origine (`r paste(levels(pays_relu$continent), collapse = ", ")`), et `identical()` renvoie `` `r identical(pays, pays_relu)` `` : le `.rds` conserve l'objet R tel quel. Avec un CSV, qui ne contient que du texte, `continent` redevient une simple chaîne de caractères (`` `r class(pays_csv$continent)` ``) : la notion de facteur et l'ordre des niveaux sont perdus. Il faudrait refaire `factor()` à la relecture, et sans `levels` explicites l'ordre deviendrait alphabétique (`r paste(levels(factor(pays_csv$continent)), collapse = ", ")`) au lieu de l'ordre des codes 1 à 5.
