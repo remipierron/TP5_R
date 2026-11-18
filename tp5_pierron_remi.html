@@ -2117,6 +2117,147 @@ mm) et la moins arrosée Besançon (626 mm). En 2025, la station la plus
 arrosée est Orléans (863 mm) et la moins arrosée Nîmes (419 mm).</p>
 </div>
 </div>
+<div id="b2" class="section level2">
+<h2>B2</h2>
+<div id="a.-import-avec-haven" class="section level3">
+<h3>a. Import avec haven</h3>
+<pre class="r"><code>library(haven)
+
+pays &lt;- read_sas(&quot;data/paysniv3.sas7bdat&quot;)
+dim(pays)</code></pre>
+<pre><code>## [1] 173  25</code></pre>
+<pre class="r"><code>glimpse(pays)</code></pre>
+<pre><code>## Rows: 173
+## Columns: 25
+## $ NOM   &lt;chr&gt; &quot;ALGERIA&quot;, &quot;EGYPT&quot;, &quot;LIBYA&quot;, &quot;MOROCCO&quot;, &quot;SUDAN&quot;, &quot;TUNISIA&quot;, &quot;BEN…
+## $ POP87 &lt;dbl&gt; 23.5, 51.9, 3.8, 24.4, 23.5, 7.6, 4.3, 7.3, 0.3, 10.8, 0.8, 13.9…
+## $ NAT   &lt;dbl&gt; 42, 37, 39, 36, 45, 32, 51, 48, 35, 46, 49, 42, 47, 41, 48, 51, …
+## $ MORT  &lt;dbl&gt; 10, 11, 9, 10, 16, 7, 20, 20, 8, 15, 28, 14, 23, 21, 16, 22, 20,…
+## $ ACCR  &lt;dbl&gt; 3.2, 2.6, 3.0, 2.5, 2.8, 2.5, 3.0, 2.8, 2.6, 3.0, 2.1, 2.8, 2.4,…
+## $ DOUB  &lt;dbl&gt; 22, 26, 23, 27, 24, 27, 23, 25, 26, 23, 33, 25, 29, 35, 22, 24, …
+## $ POP00 &lt;dbl&gt; 33.7, 71.2, 5.6, 33.3, 33.4, 9.9, 7.1, 10.5, 0.5, 17.3, 1.1, 20.…
+## $ POP20 &lt;dbl&gt; 49.4, 103.0, 8.4, 48.5, 55.6, 13.6, 14.2, 18.2, 0.7, 32.1, 1.8, …
+## $ MORTI &lt;dbl&gt; 81.0, 93.0, 90.0, 90.0, 112.0, 78.0, 115.0, 146.0, 76.5, 105.0, …
+## $ FERTI &lt;dbl&gt; 6.4, 5.3, 5.6, 4.8, 6.5, 4.5, 7.1, 6.5, 5.1, 6.7, 6.4, 5.8, 6.2,…
+## $ AGE15 &lt;dbl&gt; 46, 40, 45, 42, 45, 40, 49, 44, 46, 46, 46, 47, 43, 44, 47, 46, …
+## $ AGE65 &lt;dbl&gt; 4, 4, 3, 4, 3, 4, 5, 3, 6, 3, 3, 3, 3, 4, 3, 3, 3, 3, 2, 3, 3, 3…
+## $ ESPER &lt;dbl&gt; 60, 59, 61, 60, 49, 62, 45, 46, 60, 52, 36, 54, 41, 44, 50, 43, …
+## $ URBA  &lt;dbl&gt; 43, 46, 76, 43, 20, 53, 39, 8, 27, 43, 21, 31, 22, 27, 40, 18, 3…
+## $ EAU   &lt;dbl&gt; 90, 75, 98, NA, 48, NA, 20, 30, NA, 20, NA, 43, 17, 33, 40, 14, …
+## $ ENERG &lt;dbl&gt; 21, 19, 111, 9, 2, 20, 1, 1, 6, 6, 3, 2, 2, 1, 10, 1, 5, 2, 7, 5…
+## $ ENERT &lt;dbl&gt; 95, 142, 463, 69, -46, 137, -14, 125, NA, 5, 49, -55, -28, -40, …
+## $ PNB   &lt;dbl&gt; 2530, 680, 7500, 610, 330, 1220, 270, 140, 430, 620, 230, 390, 3…
+## $ SURF  &lt;dbl&gt; 2381740.69, 1001449.40, 1759539.81, 446549.67, 2505809.46, 16361…
+## $ CULTU &lt;dbl&gt; 3, 2, 1, 19, 5, 29, 16, 10, 10, 12, 15, 12, 6, 8, 3, 2, 0, 3, 34…
+## $ PATUR &lt;dbl&gt; 13, 0, 8, 28, 22, 18, 4, 36, 6, 9, 8, 14, 12, 35, 2, 24, 38, 7, …
+## $ FORET &lt;dbl&gt; 2, 0, 0, 12, 19, 3, 33, 2, 0, 24, 17, 3, 42, 30, 34, 7, 15, 2, 1…
+## $ PAYS  &lt;chr&gt; &quot;ALGE&quot;, &quot;EGYP&quot;, &quot;LIBY&quot;, &quot;MARO&quot;, &quot;SOUD&quot;, &quot;TUNI&quot;, &quot;BENI&quot;, &quot;BURK&quot;, …
+## $ NIV   &lt;dbl&gt; 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3…
+## $ CONTI &lt;dbl&gt; 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1…</code></pre>
+<pre class="r"><code># Nombre de valeurs manquantes par variable (seulement celles qui en ont)
+na_pays &lt;- colSums(is.na(pays))
+na_pays[na_pays &gt; 0]</code></pre>
+<pre><code>##  DOUB  URBA   EAU ENERG ENERT   PNB  SURF CULTU PATUR FORET 
+##     4     3    90    36    35    10     1     2     2     2</code></pre>
+<pre class="r"><code># Variables décrites dans l&#39;énoncé
+vars_enonce &lt;- c(&quot;NOM&quot;, &quot;CONTI&quot;, &quot;ESPER&quot;, &quot;FERTI&quot;, &quot;MORTI&quot;, &quot;PNB&quot;, &quot;URBA&quot;)
+na_pays[vars_enonce]</code></pre>
+<pre><code>##   NOM CONTI ESPER FERTI MORTI   PNB  URBA 
+##     0     0     0     0     0    10     3</code></pre>
+<p><strong>Réponse :</strong> le fichier décrit <strong>173
+pays</strong> avec <strong>25 variables</strong>. 10 variables ont des
+valeurs manquantes : DOUB (4), URBA (3), EAU (90), ENERG (36), ENERT
+(35), PNB (10), SURF (1), CULTU (2), PATUR (2), FORET (2). La plus
+touchée est EAU, avec 90 pays sans valeur, soit 52 % des pays. Parmi les
+variables présentées dans l’énoncé, PNB et URBA ont des manquantes ;
+NOM, CONTI, ESPER, FERTI, MORTI sont complètes.</p>
+</div>
+<div id="b.-conti-en-facteur" class="section level3">
+<h3>b. CONTI en facteur</h3>
+<p><code>CONTI</code> est importé comme un simple nombre
+(<code>numeric</code>), sans étiquettes SAS : on construit le facteur
+avec <code>factor()</code> en donnant les codes (<code>levels</code>) et
+les noms correspondants (<code>labels</code>), dans l’ordre de
+l’énoncé.</p>
+<pre class="r"><code>pays &lt;- pays |&gt;
+  mutate(continent = factor(CONTI,
+                            levels = 1:5,
+                            labels = c(&quot;Afrique&quot;, &quot;Asie&quot;, &quot;Amériques&quot;,
+                                       &quot;Europe&quot;, &quot;Océanie&quot;)))
+
+# Vérification : chaque code correspond bien à un seul continent
+count(pays, CONTI, continent)</code></pre>
+<pre><code>## # A tibble: 5 × 3
+##   CONTI continent     n
+##   &lt;dbl&gt; &lt;fct&gt;     &lt;int&gt;
+## 1     1 Afrique      53
+## 2     2 Asie         44
+## 3     3 Amériques    39
+## 4     4 Europe       28
+## 5     5 Océanie       9</code></pre>
+<pre class="r"><code>class(pays$continent)</code></pre>
+<pre><code>## [1] &quot;factor&quot;</code></pre>
+<p>On garde <code>CONTI</code> à côté de la nouvelle colonne
+<code>continent</code> pour pouvoir vérifier la correspondance.</p>
+</div>
+<div id="c.-résumé-par-continent" class="section level3">
+<h3>c. Résumé par continent</h3>
+<p><code>PNB</code> contient des valeurs manquantes, d’où
+<code>na.rm = TRUE</code>.</p>
+<pre class="r"><code>resume_continent &lt;- pays |&gt;
+  summarise(
+    nb_pays   = n(),
+    esper_moy = mean(ESPER, na.rm = TRUE),
+    ferti_moy = mean(FERTI, na.rm = TRUE),
+    pnb_med   = median(PNB, na.rm = TRUE),
+    .by = continent
+  ) |&gt;
+  arrange(esper_moy)
+resume_continent</code></pre>
+<pre><code>## # A tibble: 5 × 5
+##   continent nb_pays esper_moy ferti_moy pnb_med
+##   &lt;fct&gt;       &lt;int&gt;     &lt;dbl&gt;     &lt;dbl&gt;   &lt;dbl&gt;
+## 1 Afrique        53      50.8      6.11     370
+## 2 Asie           44      60.8      4.88    1150
+## 3 Océanie         9      67.9      4.06    1700
+## 4 Amériques      39      68.4      3.43    1320
+## 5 Europe         28      73.5      1.87    8335</code></pre>
+<p><strong>Réponse :</strong> du continent où l’espérance de vie moyenne
+est la plus basse au plus élevé : Afrique (50,8 ans), Asie (60,8 ans),
+Océanie (67,9 ans), Amériques (68,4 ans), Europe (73,5 ans). L’écart
+entre Afrique et Europe atteint 22,7 ans. La fécondité suit l’ordre
+inverse : 6,1 enfants par femme en Afrique contre 1,9 en Europe. Le PNB
+médian par habitant va de 370 dollars (Afrique) à 8 335 dollars
+(Europe). Le PNB médian ne suit cependant pas exactement l’ordre de
+l’espérance de vie : Océanie a une espérance de vie moyenne plus basse
+que Amériques mais un PNB médian plus élevé (1 700 contre 1 320
+dollars).</p>
+</div>
+<div id="d.-les-5-pays-à-lespérance-de-vie-la-plus-basse" class="section level3">
+<h3>d. Les 5 pays à l’espérance de vie la plus basse</h3>
+<pre class="r"><code>esper_basse &lt;- pays |&gt;
+  slice_min(ESPER, n = 5) |&gt;   # with_ties = TRUE par défaut : les ex aequo sont gardés
+  select(NOM, continent, ESPER)
+esper_basse</code></pre>
+<pre><code>## # A tibble: 7 × 3
+##   NOM          continent ESPER
+##   &lt;chr&gt;        &lt;fct&gt;     &lt;dbl&gt;
+## 1 SIERRA LEONE Afrique      35
+## 2 GAMBIA       Afrique      36
+## 3 AFGANISTHAN  Asie         39
+## 4 EAST TIMOR   Asie         40
+## 5 GUINEA       Afrique      41
+## 6 ETHIOPIA     Afrique      41
+## 7 SOMALIA      Afrique      41</code></pre>
+<p><strong>Réponse :</strong> les pays où l’espérance de vie est la plus
+basse sont SIERRA LEONE (35 ans), GAMBIA (36 ans), AFGANISTHAN (39 ans),
+EAST TIMOR (40 ans), GUINEA (41 ans), ETHIOPIA (41 ans), SOMALIA (41
+ans). Le tableau compte 7 pays et non 5, car 3 pays sont ex aequo à la
+5e place avec 41 ans (GUINEA, ETHIOPIA, SOMALIA) : on les garde tous
+plutôt que d’en choisir un arbitrairement. 5 de ces 7 pays sont en
+Afrique.</p>
+</div>
+</div>
 </div>
 
 

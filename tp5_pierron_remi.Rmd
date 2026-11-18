@@ -411,3 +411,83 @@ min_par_annee <- cumul_annuel |> slice_min(cumul, n = 1, by = annee)
 ```
 
 **Réponse :** les cumuls annuels sont donnés dans le tableau ci-dessus. `r paste0("En ", max_par_annee$annee, ", la station la plus arrosée est ", max_par_annee$station, " (", fr(max_par_annee$cumul, 0), " mm) et la moins arrosée ", min_par_annee$station, " (", fr(min_par_annee$cumul, 0), " mm)", collapse = ". ")`.
+
+## B2
+
+### a. Import avec haven
+
+```{r B2a}
+library(haven)
+
+pays <- read_sas("data/paysniv3.sas7bdat")
+dim(pays)
+glimpse(pays)
+
+# Nombre de valeurs manquantes par variable (seulement celles qui en ont)
+na_pays <- colSums(is.na(pays))
+na_pays[na_pays > 0]
+
+# Variables décrites dans l'énoncé
+vars_enonce <- c("NOM", "CONTI", "ESPER", "FERTI", "MORTI", "PNB", "URBA")
+na_pays[vars_enonce]
+```
+
+**Réponse :** le fichier décrit **`r nrow(pays)` pays** avec **`r ncol(pays)` variables**. `r sum(na_pays > 0)` variables ont des valeurs manquantes : `r paste0(names(na_pays)[na_pays > 0], " (", na_pays[na_pays > 0], ")", collapse = ", ")`. La plus touchée est `r names(which.max(na_pays))`, avec `r max(na_pays)` pays sans valeur, soit `r fr(100 * max(na_pays) / nrow(pays), 0)` % des pays. Parmi les variables présentées dans l'énoncé, `r paste(intersect(vars_enonce, names(na_pays)[na_pays > 0]), collapse = " et ")` ont des manquantes ; `r paste(setdiff(vars_enonce, names(na_pays)[na_pays > 0]), collapse = ", ")` sont complètes.
+
+### b. CONTI en facteur
+
+`CONTI` est importé comme un simple nombre (`` `r class(pays$CONTI)` ``), sans étiquettes SAS : on construit le facteur avec `factor()` en donnant les codes (`levels`) et les noms correspondants (`labels`), dans l'ordre de l'énoncé.
+
+```{r B2b}
+pays <- pays |>
+  mutate(continent = factor(CONTI,
+                            levels = 1:5,
+                            labels = c("Afrique", "Asie", "Amériques",
+                                       "Europe", "Océanie")))
+
+# Vérification : chaque code correspond bien à un seul continent
+count(pays, CONTI, continent)
+class(pays$continent)
+```
+
+On garde `CONTI` à côté de la nouvelle colonne `continent` pour pouvoir vérifier la correspondance.
+
+### c. Résumé par continent
+
+`PNB` contient des valeurs manquantes, d'où `na.rm = TRUE`.
+
+```{r B2c}
+resume_continent <- pays |>
+  summarise(
+    nb_pays   = n(),
+    esper_moy = mean(ESPER, na.rm = TRUE),
+    ferti_moy = mean(FERTI, na.rm = TRUE),
+    pnb_med   = median(PNB, na.rm = TRUE),
+    .by = continent
+  ) |>
+  arrange(esper_moy)
+resume_continent
+```
+
+```{r B2c-texte, include=FALSE}
+cont_bas  <- resume_continent |> slice_min(esper_moy, n = 1)
+cont_haut <- resume_continent |> slice_max(esper_moy, n = 1)
+```
+
+**Réponse :** du continent où l'espérance de vie moyenne est la plus basse au plus élevé : `r paste0(resume_continent$continent, " (", fr(resume_continent$esper_moy), " ans)", collapse = ", ")`. L'écart entre `r cont_bas$continent` et `r cont_haut$continent` atteint `r fr(cont_haut$esper_moy - cont_bas$esper_moy)` ans. La fécondité suit l'ordre inverse : `r fr(cont_bas$ferti_moy)` enfants par femme en `r cont_bas$continent` contre `r fr(cont_haut$ferti_moy)` en `r cont_haut$continent`. Le PNB médian par habitant va de `r fr(min(resume_continent$pnb_med), 0)` dollars (`r resume_continent$continent[which.min(resume_continent$pnb_med)]`) à `r fr(max(resume_continent$pnb_med), 0)` dollars (`r resume_continent$continent[which.max(resume_continent$pnb_med)]`). `r if (is.unsorted(resume_continent$pnb_med)) { i <- which(diff(resume_continent$pnb_med) < 0); paste0("Le PNB médian ne suit cependant pas exactement l'ordre de l'espérance de vie : ", paste0(resume_continent$continent[i], " a une espérance de vie moyenne plus basse que ", resume_continent$continent[i + 1], " mais un PNB médian plus élevé (", fr(resume_continent$pnb_med[i], 0), " contre ", fr(resume_continent$pnb_med[i + 1], 0), " dollars)", collapse = " ; "), ".") } else "Le PNB médian augmente dans le même ordre que l'espérance de vie."`
+
+### d. Les 5 pays à l'espérance de vie la plus basse
+
+```{r B2d}
+esper_basse <- pays |>
+  slice_min(ESPER, n = 5) |>   # with_ties = TRUE par défaut : les ex aequo sont gardés
+  select(NOM, continent, ESPER)
+esper_basse
+```
+
+```{r B2d-texte, include=FALSE}
+seuil_5 <- sort(pays$ESPER)[5]                 # espérance de vie du 5e pays
+ex_aequo <- esper_basse$NOM[esper_basse$ESPER == seuil_5]
+```
+
+**Réponse :** les pays où l'espérance de vie est la plus basse sont `r paste0(esper_basse$NOM, " (", esper_basse$ESPER, " ans)", collapse = ", ")`. `r if (nrow(esper_basse) > 5) paste0("Le tableau compte ", nrow(esper_basse), " pays et non 5, car ", length(ex_aequo), " pays sont ex aequo à la 5e place avec ", seuil_5, " ans (", paste(ex_aequo, collapse = ", "), ") : on les garde tous plutôt que d'en choisir un arbitrairement. ") else ""``r sum(esper_basse$continent == "Afrique")` de ces `r nrow(esper_basse)` pays sont en Afrique.
