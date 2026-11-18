@@ -2708,6 +2708,252 @@ ont une bonne note globale. Remarque : dans ce fichier,
 </div>
 </div>
 </div>
+<div id="partie-d-nettoyer-un-fichier-rh-et-joindre-des-tables" class="section level1">
+<h1>Partie D : Nettoyer un fichier RH et joindre des tables</h1>
+<div id="d1" class="section level2">
+<h2>D1</h2>
+<div id="import" class="section level3">
+<h3>Import</h3>
+<pre class="r"><code>emp &lt;- read_csv(&quot;data/employee.csv&quot;, show_col_types = FALSE)
+glimpse(emp)</code></pre>
+<pre><code>## Rows: 235
+## Columns: 9
+## $ Employee_ID &lt;dbl&gt; 120101, 120104, 120105, 120106, 120107, 120108, 120108, 12…
+## $ First       &lt;chr&gt; &quot;Patrick&quot;, &quot;Kareen&quot;, &quot;Liz&quot;, &quot;John&quot;, &quot;Sherie&quot;, &quot;Gladys&quot;, &quot;G…
+## $ Last        &lt;chr&gt; &quot;Lu&quot;, &quot;Billington&quot;, &quot;Povey&quot;, &quot;Hornsey&quot;, &quot;Sheedy&quot;, &quot;Gromek&quot;…
+## $ Gender      &lt;chr&gt; &quot;M&quot;, &quot;F&quot;, &quot;F&quot;, &quot;M&quot;, &quot;F&quot;, &quot;F&quot;, &quot;F&quot;, &quot;M&quot;, &quot;M&quot;, &quot;F&quot;, &quot;F&quot;, &quot;G&quot;…
+## $ Salary      &lt;dbl&gt; 163040, 46230, 27110, NA, 30475, 27660, 26495, 28615, 2689…
+## $ Job_Title   &lt;chr&gt; &quot;Director&quot;, &quot;Administration Manager&quot;, &quot;Secretary I&quot;, &quot;Offi…
+## $ Country     &lt;chr&gt; &quot;AU&quot;, &quot;au&quot;, &quot;AU&quot;, &quot;AU&quot;, &quot;AU&quot;, &quot;AU&quot;, &quot;AU&quot;, &quot;AU&quot;, &quot;AU&quot;, &quot;AU&quot;…
+## $ Birth_Date  &lt;chr&gt; &quot;18/08/1976&quot;, &quot;11/05/1954&quot;, &quot;21/12/1974&quot;, &quot;23/12/1944&quot;, &quot;0…
+## $ Hire_Date   &lt;chr&gt; &quot;01/07/2003&quot;, &quot;01/01/1981&quot;, &quot;01/05/1999&quot;, &quot;01/01/1974&quot;, &quot;2…</code></pre>
+<pre class="r"><code>problems(emp)</code></pre>
+<pre><code>## # A tibble: 0 × 5
+## # ℹ 5 variables: row &lt;int&gt;, col &lt;int&gt;, expected &lt;chr&gt;, actual &lt;chr&gt;, file &lt;chr&gt;</code></pre>
+<p>Les dates (<code>Birth_Date</code>, <code>Hire_Date</code>) sont lues
+comme du texte (<code>character</code>), au format
+<code>jj/mm/aaaa</code>.</p>
+</div>
+<div id="diagnostic" class="section level3">
+<h3>Diagnostic</h3>
+<p><strong>Valeurs manquantes</strong></p>
+<pre class="r"><code>colSums(is.na(emp))</code></pre>
+<pre><code>## Employee_ID       First        Last      Gender      Salary   Job_Title 
+##           1           0           0           1           1           1 
+##     Country  Birth_Date   Hire_Date 
+##           0           0           1</code></pre>
+<pre class="r"><code>emp |&gt; filter(if_any(everything(), is.na))   # les lignes concernées</code></pre>
+<pre><code>## # A tibble: 5 × 9
+##   Employee_ID First  Last   Gender Salary Job_Title Country Birth_Date Hire_Date
+##         &lt;dbl&gt; &lt;chr&gt;  &lt;chr&gt;  &lt;chr&gt;   &lt;dbl&gt; &lt;chr&gt;     &lt;chr&gt;   &lt;chr&gt;      &lt;chr&gt;    
+## 1      120106 John   Horns… M          NA Office A… AU      23/12/1944 01/01/19…
+## 2      120111 Ubaldo Spill… M       26895 Security… AU      23/07/1949 &lt;NA&gt;     
+## 3      120112 Ellis  Glatt… F       26550 &lt;NA&gt;      AU      17/02/1969 01/07/19…
+## 4          NA Austen Ralst… M       29250 Service … AU      13/06/1959 01/02/19…
+## 5      120723 Deanna Olsen  &lt;NA&gt;    33950 Corp. Co… US      10/08/1949 01/01/19…</code></pre>
+<p><strong>Codes incohérents</strong></p>
+<pre class="r"><code>table(emp$Gender, useNA = &quot;ifany&quot;)    # autre chose que F / M ?</code></pre>
+<pre><code>## 
+##    F    G    M &lt;NA&gt; 
+##  110    1  123    1</code></pre>
+<pre class="r"><code>table(emp$Country, useNA = &quot;ifany&quot;)   # majuscules et minuscules mélangées</code></pre>
+<pre><code>## 
+##  au  AU  us  US 
+##   3  33   3 196</code></pre>
+<p><strong>Doublons</strong></p>
+<pre class="r"><code>sum(duplicated(emp))                        # lignes strictement identiques</code></pre>
+<pre><code>## [1] 0</code></pre>
+<pre class="r"><code>emp |&gt; count(Employee_ID) |&gt; filter(n &gt; 1)  # identifiants en double</code></pre>
+<pre><code>## # A tibble: 1 × 2
+##   Employee_ID     n
+##         &lt;dbl&gt; &lt;int&gt;
+## 1      120108     2</code></pre>
+<pre class="r"><code>emp |&gt; filter(Employee_ID %in% Employee_ID[duplicated(Employee_ID, incomparables = NA)]) |&gt;
+  select(Employee_ID, First, Last, Job_Title, Hire_Date)</code></pre>
+<pre><code>## # A tibble: 2 × 5
+##   Employee_ID First    Last   Job_Title              Hire_Date 
+##         &lt;dbl&gt; &lt;chr&gt;    &lt;chr&gt;  &lt;chr&gt;                  &lt;chr&gt;     
+## 1      120108 Gladys   Gromek Warehouse Assistant II 01/08/2006
+## 2      120108 Gabriele Baker  Warehouse Assistant I  01/10/2006</code></pre>
+<p><strong>Valeurs impossibles ou aberrantes</strong></p>
+<pre class="r"><code>summary(emp$Salary)</code></pre>
+<pre><code>##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max.     NAs 
+##    2401   27804   34020   43955   47252  433800       1</code></pre>
+<pre class="r"><code>emp |&gt; filter(Salary &lt; 10000) |&gt; select(Employee_ID, First, Last, Job_Title, Salary)</code></pre>
+<pre><code>## # A tibble: 2 × 5
+##   Employee_ID First   Last        Job_Title           Salary
+##         &lt;dbl&gt; &lt;chr&gt;   &lt;chr&gt;       &lt;chr&gt;                &lt;dbl&gt;
+## 1      120115 Hugh    Nichollas   Service Assistant I   2650
+## 2      120191 Jannene Graham-Rowe Trainee               2401</code></pre>
+<pre class="r"><code>emp |&gt; slice_max(Salary, n = 3) |&gt; select(First, Last, Job_Title, Salary)</code></pre>
+<pre><code>## # A tibble: 3 × 4
+##   First     Last     Job_Title               Salary
+##   &lt;chr&gt;     &lt;chr&gt;    &lt;chr&gt;                    &lt;dbl&gt;
+## 1 Anthony   Miller   Chief Executive Officer 433800
+## 2 Max       Crown    Chief Financial Officer 268455
+## 3 Christine Fletcher Chief Marketing Officer 207885</code></pre>
+<pre class="r"><code># Dates : conversion temporaire pour contrôler leur cohérence
+emp_dates &lt;- emp |&gt;
+  mutate(naissance = dmy(Birth_Date),
+         embauche  = dmy(Hire_Date),
+         age_emb   = as.numeric(embauche - naissance) / 365.25)
+
+range(emp_dates$naissance, na.rm = TRUE)</code></pre>
+<pre><code>## [1] &quot;1944-01-14&quot; &quot;1988-12-27&quot;</code></pre>
+<pre class="r"><code>range(emp_dates$embauche, na.rm = TRUE)</code></pre>
+<pre><code>## [1] &quot;1953-01-21&quot; &quot;2006-12-01&quot;</code></pre>
+<pre class="r"><code># Embauches avant la création de l&#39;enseigne (1974)
+emp_dates |&gt; filter(embauche &lt; as.Date(&quot;1974-01-01&quot;)) |&gt;
+  select(Employee_ID, First, Last, Birth_Date, Hire_Date)</code></pre>
+<pre><code>## # A tibble: 2 × 5
+##   Employee_ID First  Last   Birth_Date Hire_Date 
+##         &lt;dbl&gt; &lt;chr&gt;  &lt;chr&gt;  &lt;chr&gt;      &lt;chr&gt;     
+## 1      120107 Sherie Sheedy 01/02/1978 21/01/1953
+## 2      121011 Steven Banchi 11/03/1944 01/01/1968</code></pre>
+<pre class="r"><code># Embauches à moins de 16 ans (dont avant la naissance)
+emp_dates |&gt; filter(age_emb &lt; 16) |&gt;
+  select(Employee_ID, First, Last, Birth_Date, Hire_Date, age_emb)</code></pre>
+<pre><code>## # A tibble: 3 × 6
+##   Employee_ID First    Last   Birth_Date Hire_Date  age_emb
+##         &lt;dbl&gt; &lt;chr&gt;    &lt;chr&gt;  &lt;chr&gt;      &lt;chr&gt;        &lt;dbl&gt;
+## 1      120107 Sherie   Sheedy 01/02/1978 21/01/1953   -25.0
+## 2      120277 Wesley   Shirts 16/08/1988 01/05/2004    15.7
+## 3      120729 Kimberly Howell 03/04/1988 25/04/2003    15.1</code></pre>
+</div>
+<div id="bilan-des-anomalies" class="section level3">
+<h3>Bilan des anomalies</h3>
+<pre class="r"><code>anomalies &lt;- tibble(
+  anomalie = c(
+    &quot;Employee_ID manquant&quot;,
+    &quot;Employee_ID en double (2 personnes différentes)&quot;,
+    &quot;Lignes strictement identiques&quot;,
+    &quot;Gender manquant&quot;,
+    &quot;Gender incohérent (ni F ni M)&quot;,
+    &quot;Country en minuscules (au, us)&quot;,
+    &quot;Salary manquant&quot;,
+    &quot;Salary &lt; 10 000 (zéro oublié ?)&quot;,
+    &quot;Job_Title manquant&quot;,
+    &quot;Hire_Date manquante&quot;,
+    &quot;Hire_Date antérieure à 1974 (création de l&#39;enseigne)&quot;,
+    &quot;Embauche avant la naissance&quot;,
+    &quot;Embauche avant 16 ans (hors cas précédent)&quot;,
+    &quot;Dates stockées en texte&quot;
+  ),
+  nb_lignes = c(
+    sum(is.na(emp$Employee_ID)),
+    sum(emp$Employee_ID %in% emp$Employee_ID[duplicated(emp$Employee_ID, incomparables = NA)]),
+    sum(duplicated(emp)),
+    sum(is.na(emp$Gender)),
+    sum(!emp$Gender %in% c(&quot;F&quot;, &quot;M&quot;) &amp; !is.na(emp$Gender)),
+    sum(emp$Country != toupper(emp$Country)),
+    sum(is.na(emp$Salary)),
+    sum(emp$Salary &lt; 10000, na.rm = TRUE),
+    sum(is.na(emp$Job_Title)),
+    sum(is.na(emp$Hire_Date)),
+    sum(emp_dates$embauche &lt; as.Date(&quot;1974-01-01&quot;), na.rm = TRUE),
+    sum(emp_dates$embauche &lt; emp_dates$naissance, na.rm = TRUE),
+    sum(emp_dates$age_emb &gt;= 0 &amp; emp_dates$age_emb &lt; 16, na.rm = TRUE),
+    nrow(emp)
+  )
+)
+knitr::kable(anomalies, col.names = c(&quot;Anomalie&quot;, &quot;Lignes concernées&quot;))</code></pre>
+<table>
+<colgroup>
+<col width="74%" />
+<col width="25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">Anomalie</th>
+<th align="right">Lignes concernées</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Employee_ID manquant</td>
+<td align="right">1</td>
+</tr>
+<tr class="even">
+<td align="left">Employee_ID en double (2 personnes différentes)</td>
+<td align="right">2</td>
+</tr>
+<tr class="odd">
+<td align="left">Lignes strictement identiques</td>
+<td align="right">0</td>
+</tr>
+<tr class="even">
+<td align="left">Gender manquant</td>
+<td align="right">1</td>
+</tr>
+<tr class="odd">
+<td align="left">Gender incohérent (ni F ni M)</td>
+<td align="right">1</td>
+</tr>
+<tr class="even">
+<td align="left">Country en minuscules (au, us)</td>
+<td align="right">6</td>
+</tr>
+<tr class="odd">
+<td align="left">Salary manquant</td>
+<td align="right">1</td>
+</tr>
+<tr class="even">
+<td align="left">Salary &lt; 10 000 (zéro oublié ?)</td>
+<td align="right">2</td>
+</tr>
+<tr class="odd">
+<td align="left">Job_Title manquant</td>
+<td align="right">1</td>
+</tr>
+<tr class="even">
+<td align="left">Hire_Date manquante</td>
+<td align="right">1</td>
+</tr>
+<tr class="odd">
+<td align="left">Hire_Date antérieure à 1974 (création de
+l’enseigne)</td>
+<td align="right">2</td>
+</tr>
+<tr class="even">
+<td align="left">Embauche avant la naissance</td>
+<td align="right">1</td>
+</tr>
+<tr class="odd">
+<td align="left">Embauche avant 16 ans (hors cas précédent)</td>
+<td align="right">2</td>
+</tr>
+<tr class="even">
+<td align="left">Dates stockées en texte</td>
+<td align="right">235</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Réponse :</strong> le fichier compte 235 employés et 12 types
+d’anomalies (tableau ci-dessus) :</p>
+<ul>
+<li><strong>valeurs manquantes</strong> : 1 en Employee_ID, 1 en Gender,
+1 en Salary, 1 en Job_Title, 1 en Hire_Date, réparties sur 5 lignes
+;</li>
+<li><strong>codes incohérents</strong> : 1 genre codé <code>G</code> et
+6 pays écrits en minuscules (au, us) ;</li>
+<li><strong>doublons</strong> : aucune ligne strictement identique, mais
+l’identifiant 120108 est attribué à 2 personnes différentes (Gladys
+Gromek et Gabriele Baker) : c’est une erreur de saisie à signaler, pas
+une ligne à supprimer ;</li>
+<li><strong>salaires aberrants</strong> : 2 salaires inférieurs à 10 000
+(2 650 pour Service Assistant I, 2 401 pour Trainee), sans doute un zéro
+oublié. Le salaire maximal (433 800) est élevé mais plausible : c’est
+celui du Chief Executive Officer ;</li>
+<li><strong>dates impossibles</strong> : 2 embauches antérieures à la
+création de l’enseigne en 1974 (21/01/1953 et 01/01/1968), dont 1 avant
+même la naissance de l’employé ; et 2 employés embauchés avant 16 ans
+(15,7 ans et 15,1 ans), ce qui est douteux ;</li>
+<li><strong>types</strong> : les deux colonnes de dates sont stockées en
+texte et devront être converties.</li>
+</ul>
+</div>
+</div>
+</div>
 
 
 

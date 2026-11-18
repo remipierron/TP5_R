@@ -761,3 +761,124 @@ ggplot(vins_global, aes(x = tasting, y = Global)) +
 ```
 
 **Réponse :** oui, la note `Global` est fortement liée à la moyenne obtenue à l'étape `tasting` : le coefficient de corrélation de Pearson vaut **`r fr(cor_global, 2)`**, soit une liaison positive et forte. Le test de corrélation donne une p-valeur de `r format(test_global$p.value, digits = 2)`, très inférieure à 5 % : la corrélation est significativement différente de 0. Les vins jugés bons en bouche sont donc aussi ceux qui ont une bonne note globale. Remarque : dans ce fichier, `Global` est `r if (identical(vins$Global, vins$Assessor1)) "strictement identique à la colonne \x60Assessor1\x60" else "différente de \x60Assessor1\x60"`.
+
+# Partie D : Nettoyer un fichier RH et joindre des tables
+
+## D1
+
+### Import
+
+```{r D1-import}
+emp <- read_csv("data/employee.csv", show_col_types = FALSE)
+glimpse(emp)
+problems(emp)
+```
+
+Les dates (`Birth_Date`, `Hire_Date`) sont lues comme du texte (`` `r class(emp$Birth_Date)` ``), au format `jj/mm/aaaa`.
+
+### Diagnostic
+
+**Valeurs manquantes**
+
+```{r D1-na}
+colSums(is.na(emp))
+emp |> filter(if_any(everything(), is.na))   # les lignes concernées
+```
+
+**Codes incohérents**
+
+```{r D1-codes}
+table(emp$Gender, useNA = "ifany")    # autre chose que F / M ?
+table(emp$Country, useNA = "ifany")   # majuscules et minuscules mélangées
+```
+
+**Doublons**
+
+```{r D1-doublons}
+sum(duplicated(emp))                        # lignes strictement identiques
+emp |> count(Employee_ID) |> filter(n > 1)  # identifiants en double
+emp |> filter(Employee_ID %in% Employee_ID[duplicated(Employee_ID, incomparables = NA)]) |>
+  select(Employee_ID, First, Last, Job_Title, Hire_Date)
+```
+
+**Valeurs impossibles ou aberrantes**
+
+```{r D1-valeurs}
+summary(emp$Salary)
+emp |> filter(Salary < 10000) |> select(Employee_ID, First, Last, Job_Title, Salary)
+emp |> slice_max(Salary, n = 3) |> select(First, Last, Job_Title, Salary)
+
+# Dates : conversion temporaire pour contrôler leur cohérence
+emp_dates <- emp |>
+  mutate(naissance = dmy(Birth_Date),
+         embauche  = dmy(Hire_Date),
+         age_emb   = as.numeric(embauche - naissance) / 365.25)
+
+range(emp_dates$naissance, na.rm = TRUE)
+range(emp_dates$embauche, na.rm = TRUE)
+
+# Embauches avant la création de l'enseigne (1974)
+emp_dates |> filter(embauche < as.Date("1974-01-01")) |>
+  select(Employee_ID, First, Last, Birth_Date, Hire_Date)
+
+# Embauches à moins de 16 ans (dont avant la naissance)
+emp_dates |> filter(age_emb < 16) |>
+  select(Employee_ID, First, Last, Birth_Date, Hire_Date, age_emb)
+```
+
+### Bilan des anomalies
+
+```{r D1-bilan}
+anomalies <- tibble(
+  anomalie = c(
+    "Employee_ID manquant",
+    "Employee_ID en double (2 personnes différentes)",
+    "Lignes strictement identiques",
+    "Gender manquant",
+    "Gender incohérent (ni F ni M)",
+    "Country en minuscules (au, us)",
+    "Salary manquant",
+    "Salary < 10 000 (zéro oublié ?)",
+    "Job_Title manquant",
+    "Hire_Date manquante",
+    "Hire_Date antérieure à 1974 (création de l'enseigne)",
+    "Embauche avant la naissance",
+    "Embauche avant 16 ans (hors cas précédent)",
+    "Dates stockées en texte"
+  ),
+  nb_lignes = c(
+    sum(is.na(emp$Employee_ID)),
+    sum(emp$Employee_ID %in% emp$Employee_ID[duplicated(emp$Employee_ID, incomparables = NA)]),
+    sum(duplicated(emp)),
+    sum(is.na(emp$Gender)),
+    sum(!emp$Gender %in% c("F", "M") & !is.na(emp$Gender)),
+    sum(emp$Country != toupper(emp$Country)),
+    sum(is.na(emp$Salary)),
+    sum(emp$Salary < 10000, na.rm = TRUE),
+    sum(is.na(emp$Job_Title)),
+    sum(is.na(emp$Hire_Date)),
+    sum(emp_dates$embauche < as.Date("1974-01-01"), na.rm = TRUE),
+    sum(emp_dates$embauche < emp_dates$naissance, na.rm = TRUE),
+    sum(emp_dates$age_emb >= 0 & emp_dates$age_emb < 16, na.rm = TRUE),
+    nrow(emp)
+  )
+)
+knitr::kable(anomalies, col.names = c("Anomalie", "Lignes concernées"))
+```
+
+```{r D1-texte, include=FALSE}
+emp_sal_bas <- emp |> filter(Salary < 10000)
+emp_avant74 <- emp_dates |> filter(embauche < as.Date("1974-01-01"))
+emp_moins16 <- emp_dates |> filter(age_emb >= 0, age_emb < 16)
+pdg <- emp |> slice_max(Salary, n = 1)
+id_double <- emp$Employee_ID[duplicated(emp$Employee_ID, incomparables = NA)]
+```
+
+**Réponse :** le fichier compte `r nrow(emp)` employés et `r sum(anomalies$nb_lignes[anomalies$anomalie != "Dates stockées en texte"] > 0)` types d'anomalies (tableau ci-dessus) :
+
+- **valeurs manquantes** : `r paste0(colSums(is.na(emp))[colSums(is.na(emp)) > 0], " en ", names(emp)[colSums(is.na(emp)) > 0], collapse = ", ")`, réparties sur `r nrow(filter(emp, if_any(everything(), is.na)))` lignes ;
+- **codes incohérents** : `r anomalies$nb_lignes[5]` genre codé `` `r setdiff(na.omit(unique(emp$Gender)), c("F", "M"))` `` et `r anomalies$nb_lignes[6]` pays écrits en minuscules (`r paste(unique(emp$Country[emp$Country != toupper(emp$Country)]), collapse = ", ")`) ;
+- **doublons** : aucune ligne strictement identique, mais l'identifiant `r format(id_double, scientific = FALSE)` est attribué à `r anomalies$nb_lignes[2]` personnes différentes (`r paste(emp$First[emp$Employee_ID %in% id_double], emp$Last[emp$Employee_ID %in% id_double], collapse = " et ")`) : c'est une erreur de saisie à signaler, pas une ligne à supprimer ;
+- **salaires aberrants** : `r nrow(emp_sal_bas)` salaires inférieurs à 10 000 (`r paste0(fr(emp_sal_bas$Salary, 0), " pour ", emp_sal_bas$Job_Title, collapse = ", ")`), sans doute un zéro oublié. Le salaire maximal (`r fr(pdg$Salary, 0)`) est élevé mais plausible : c'est celui du `r pdg$Job_Title` ;
+- **dates impossibles** : `r nrow(emp_avant74)` embauches antérieures à la création de l'enseigne en 1974 (`r paste(format(emp_avant74$embauche, "%d/%m/%Y"), collapse = " et ")`), dont `r anomalies$nb_lignes[12]` avant même la naissance de l'employé ; et `r nrow(emp_moins16)` employés embauchés avant 16 ans (`r paste0(fr(emp_moins16$age_emb), " ans", collapse = " et ")`), ce qui est douteux ;
+- **types** : les deux colonnes de dates sont stockées en texte et devront être converties.
