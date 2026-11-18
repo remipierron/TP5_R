@@ -16,7 +16,7 @@ library(readxl)
 # Mise en forme « à la française » des nombres insérés dans le texte
 # (virgule décimale, espace pour les milliers)
 fr <- function(x, d = 1) {
-  format(round(x, d), nsmall = d, big.mark = " ", decimal.mark = ",")
+  trimws(format(round(x, d), nsmall = d, big.mark = " ", decimal.mark = ","))
 }
 ```
 
@@ -227,3 +227,51 @@ jours_stat <- count(meteo, station)
 ```
 
 **Réponse :** `meteo` contient **`r nrow(meteo)` lignes et `r ncol(meteo)` colonnes**, et `problems()` ne signale aucune ligne mal lue (`r nrow(problems(meteo))` problème). Les types sont corrects : `date` est de classe `` `r types_mto[["date"]]` ``, `station` de classe `` `r types_mto[["station"]]` ``, et les colonnes `r paste(names(types_mto)[types_mto == "numeric"], collapse = ", ")` sont numériques. Il y a **`r sum(na_meteo)` valeurs manquantes** : `r paste(na_meteo[na_meteo > 0], "dans", names(na_meteo)[na_meteo > 0], collapse = " et ")`, aucune ailleurs. La période couverte va du `r format(periode[1], "%d/%m/%Y")` au `r format(periode[2], "%d/%m/%Y")` (`r as.numeric(diff(periode)) + 1` jours). Les `r nrow(jours_stat)` stations s'affichent avec leurs accents (`r paste(jours_stat$station, collapse = ", ")`) et ont chacune `r paste(unique(jours_stat$n), collapse = "/")` jours de relevés.
+
+## A4
+
+### a. Bilan par station
+
+`temp_max` contient des valeurs manquantes : on utilise `na.rm = TRUE` dans tous les résumés (sinon la moyenne de la station concernée vaudrait `NA`).
+
+```{r A4a}
+bilan_meteo <- meteo |>
+  summarise(
+    temp_min_moy = mean(temp_min, na.rm = TRUE),        # température minimale moyenne
+    temp_max_moy = mean(temp_max, na.rm = TRUE),        # température maximale moyenne
+    pluie_cumul  = sum(pluie_mm, na.rm = TRUE),         # cumul de pluie (mm)
+    jours_gel    = sum(temp_min < 0, na.rm = TRUE),     # nb de jours où temp_min < 0
+    jours_pluie  = sum(pluie_mm > 0, na.rm = TRUE),     # nb de jours où pluie_mm > 0
+    .by = station
+  )
+bilan_meteo
+```
+
+`sum()` sur une condition logique compte les `TRUE` : c'est ce qui donne directement un nombre de jours.
+
+### b. Station la plus gelée, station la plus pluvieuse
+
+```{r A4b}
+plus_gel   <- bilan_meteo |> slice_max(jours_gel, n = 1)
+plus_pluie <- bilan_meteo |> slice_max(pluie_cumul, n = 1)
+plus_jours_pluie <- bilan_meteo |> slice_max(jours_pluie, n = 1)
+
+plus_gel         |> select(station, jours_gel)
+plus_pluie       |> select(station, pluie_cumul)
+plus_jours_pluie |> select(station, jours_pluie)
+```
+
+**Réponse :** la station qui a connu le plus de jours de gel est **`r plus_gel$station`**, avec `r plus_gel$jours_gel` jours de gel sur `r n_distinct(meteo$date)` (pour une température minimale moyenne de `r fr(plus_gel$temp_min_moy)` °C). La station qui a reçu le plus de pluie en cumul est **`r plus_pluie$station`**, avec `r fr(plus_pluie$pluie_cumul)` mm sur le mois`r if (plus_pluie$station != plus_jours_pluie$station) paste0(", bien que ce ne soit pas la station où il a plu le plus souvent : c'est ", plus_jours_pluie$station, " qui compte le plus de jours de pluie (", plus_jours_pluie$jours_pluie, " jours, contre ", plus_pluie$jours_pluie, " à ", plus_pluie$station, ")") else ""`.
+
+### c. Jour le plus froid de chaque station
+
+On prend le jour où la température **minimale** est la plus basse.
+
+```{r A4c}
+jour_froid <- meteo |>
+  slice_min(temp_min, n = 1, by = station) |>   # ex aequo éventuels conservés
+  select(station, date, temp_min)
+jour_froid
+```
+
+**Réponse :** le jour le plus froid de chaque station est : `r paste0(jour_froid$station, " le ", format(jour_froid$date, "%d/%m/%Y"), " (", fr(jour_froid$temp_min), " °C)", collapse = ", ")`.

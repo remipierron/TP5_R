@@ -1798,6 +1798,83 @@ Les 4 stations s’affichent avec leurs accents (Besançon, Nîmes, Orléans,
 Saint-Étienne) et ont chacune 31 jours de relevés.</p>
 </div>
 </div>
+<div id="a4" class="section level2">
+<h2>A4</h2>
+<div id="a.-bilan-par-station" class="section level3">
+<h3>a. Bilan par station</h3>
+<p><code>temp_max</code> contient des valeurs manquantes : on utilise
+<code>na.rm = TRUE</code> dans tous les résumés (sinon la moyenne de la
+station concernée vaudrait <code>NA</code>).</p>
+<pre class="r"><code>bilan_meteo &lt;- meteo |&gt;
+  summarise(
+    temp_min_moy = mean(temp_min, na.rm = TRUE),        # température minimale moyenne
+    temp_max_moy = mean(temp_max, na.rm = TRUE),        # température maximale moyenne
+    pluie_cumul  = sum(pluie_mm, na.rm = TRUE),         # cumul de pluie (mm)
+    jours_gel    = sum(temp_min &lt; 0, na.rm = TRUE),     # nb de jours où temp_min &lt; 0
+    jours_pluie  = sum(pluie_mm &gt; 0, na.rm = TRUE),     # nb de jours où pluie_mm &gt; 0
+    .by = station
+  )
+bilan_meteo</code></pre>
+<pre><code>## # A tibble: 4 × 6
+##   station       temp_min_moy temp_max_moy pluie_cumul jours_gel jours_pluie
+##   &lt;chr&gt;                &lt;dbl&gt;        &lt;dbl&gt;       &lt;dbl&gt;     &lt;int&gt;       &lt;int&gt;
+## 1 Orléans              0.774         7.07        50.8        11          11
+## 2 Besançon            -2.32          3.91        69.6        28          19
+## 3 Nîmes                5.01         11.0         99           0          15
+## 4 Saint-Étienne       -1.07          5.26        76.1        20          13</code></pre>
+<p><code>sum()</code> sur une condition logique compte les
+<code>TRUE</code> : c’est ce qui donne directement un nombre de
+jours.</p>
+</div>
+<div id="b.-station-la-plus-gelée-station-la-plus-pluvieuse" class="section level3">
+<h3>b. Station la plus gelée, station la plus pluvieuse</h3>
+<pre class="r"><code>plus_gel   &lt;- bilan_meteo |&gt; slice_max(jours_gel, n = 1)
+plus_pluie &lt;- bilan_meteo |&gt; slice_max(pluie_cumul, n = 1)
+plus_jours_pluie &lt;- bilan_meteo |&gt; slice_max(jours_pluie, n = 1)
+
+plus_gel         |&gt; select(station, jours_gel)</code></pre>
+<pre><code>## # A tibble: 1 × 2
+##   station  jours_gel
+##   &lt;chr&gt;        &lt;int&gt;
+## 1 Besançon        28</code></pre>
+<pre class="r"><code>plus_pluie       |&gt; select(station, pluie_cumul)</code></pre>
+<pre><code>## # A tibble: 1 × 2
+##   station pluie_cumul
+##   &lt;chr&gt;         &lt;dbl&gt;
+## 1 Nîmes            99</code></pre>
+<pre class="r"><code>plus_jours_pluie |&gt; select(station, jours_pluie)</code></pre>
+<pre><code>## # A tibble: 1 × 2
+##   station  jours_pluie
+##   &lt;chr&gt;          &lt;int&gt;
+## 1 Besançon          19</code></pre>
+<p><strong>Réponse :</strong> la station qui a connu le plus de jours de
+gel est <strong>Besançon</strong>, avec 28 jours de gel sur 31 (pour une
+température minimale moyenne de -2,3 °C). La station qui a reçu le plus
+de pluie en cumul est <strong>Nîmes</strong>, avec 99,0 mm sur le mois,
+bien que ce ne soit pas la station où il a plu le plus souvent : c’est
+Besançon qui compte le plus de jours de pluie (19 jours, contre 15 à
+Nîmes).</p>
+</div>
+<div id="c.-jour-le-plus-froid-de-chaque-station" class="section level3">
+<h3>c. Jour le plus froid de chaque station</h3>
+<p>On prend le jour où la température <strong>minimale</strong> est la
+plus basse.</p>
+<pre class="r"><code>jour_froid &lt;- meteo |&gt;
+  slice_min(temp_min, n = 1, by = station) |&gt;   # ex aequo éventuels conservés
+  select(station, date, temp_min)
+jour_froid</code></pre>
+<pre><code>## # A tibble: 4 × 3
+##   station       date       temp_min
+##   &lt;chr&gt;         &lt;date&gt;        &lt;dbl&gt;
+## 1 Orléans       2026-01-15     -5.4
+## 2 Besançon      2026-01-26     -5.1
+## 3 Nîmes         2026-01-29      0.1
+## 4 Saint-Étienne 2026-01-02     -5.6</code></pre>
+<p><strong>Réponse :</strong> le jour le plus froid de chaque station
+est : Orléans le 15/01/2026 (-5,4 °C), Besançon le 26/01/2026 (-5,1 °C),
+Nîmes le 29/01/2026 (0,1 °C), Saint-Étienne le 02/01/2026 (-5,6 °C).</p>
+</div>
+</div>
 </div>
 
 
