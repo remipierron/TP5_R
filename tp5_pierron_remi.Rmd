@@ -671,3 +671,93 @@ all.equal(amplitude$amplitude_moy, controle_amp$amplitude_moy)
 ```
 
 **Réponse :** l'amplitude thermique quotidienne moyenne de janvier 2026 est de `r paste0(fr(amplitude$amplitude_moy, 2), " °C à ", amplitude$station, collapse = ", ")`. Les quatre stations sont très proches (écart de `r fr(max(amplitude$amplitude_moy) - min(amplitude$amplitude_moy), 2)` °C seulement entre la plus forte, `r amplitude$station[1]`, et la plus faible, `r amplitude$station[nrow(amplitude)]`), alors que leurs températures moyennes sont très différentes (question A4). Les moyennes portent sur `r paste(range(amplitude$nb_jours), collapse = " à ")` jours selon la station, à cause des valeurs manquantes de `temp_max`. `r if (isTRUE(all.equal(amplitude$amplitude_moy, controle_amp$amplitude_moy))) "Le calcul direct sur \x60meteo\x60 donne les mêmes valeurs, ce qui valide le passage long → large." else "Attention : le calcul direct sur \x60meteo\x60 donne des valeurs différentes."`
+
+## C3
+
+### a. Import et format long
+
+```{r C3a-import}
+vins <- read_excel("data/wines.xlsx")
+dim(vins)
+names(vins)
+```
+
+Les noms des colonnes de notes collent deux informations : l'**étape** (des lettres : `rest`, `view`, `shaking`, `tasting`) et le **numéro du descripteur** (des chiffres). Avec `names_pattern`, une expression régulière à deux groupes `([a-z]+)(\\d+)` découpe chaque nom en deux colonnes. On garde `Wines` et `Soul` comme identifiants de chaque note.
+
+```{r C3a}
+vins_long <- vins |>
+  select(Wines, Soul, rest1:tasting9) |>
+  pivot_longer(cols          = rest1:tasting9,
+               names_to      = c("etape", "descripteur"),
+               names_pattern = "([a-z]+)(\\d+)",   # lettres puis chiffres
+               values_to     = "note")
+vins_long
+
+# Nombre de notes par étape (21 vins x nombre de descripteurs)
+count(vins_long, etape)
+```
+
+**Réponse :** `vins_long` compte `r nrow(vins_long)` lignes (`r n_distinct(vins_long$Wines)` vins × `r nrow(distinct(vins_long, etape, descripteur))` descripteurs), avec une colonne `etape` et une colonne `descripteur` tirées des noms de colonnes. Le nombre de descripteurs par étape est : `r paste0(count(vins_long, etape, name = "nb")$etape, " ", count(vins_long, etape, name = "nb")$nb / n_distinct(vins_long$Wines), collapse = ", ")`.
+
+### b. Note moyenne par vin et par étape, en format large
+
+`pivot_wider()` crée les colonnes dans l'ordre où les étapes apparaissent ; pour garantir l'ordre demandé, on le fixe explicitement avec `select()`.
+
+```{r C3b}
+ordre_etapes <- c("rest", "view", "shaking", "tasting")
+
+vins_moy <- vins_long |>
+  summarise(note_moy = mean(note, na.rm = TRUE),
+            .by = c(Wines, Soul, etape)) |>
+  pivot_wider(names_from = etape, values_from = note_moy) |>
+  select(Wines, Soul, all_of(ordre_etapes))
+vins_moy
+```
+
+### c. Les 3 meilleurs vins à l'étape `tasting`
+
+```{r C3c}
+top_tasting <- vins_moy |>
+  slice_max(tasting, n = 3) |>        # ex aequo conservés
+  select(Wines, Soul, tasting)
+top_tasting
+
+# Rang de chaque vin (les ex aequo ont le même rang)
+top_tasting |> mutate(rang = min_rank(desc(tasting)))
+```
+
+```{r C3c-texte, include=FALSE}
+top_rang <- top_tasting |> mutate(rang = min_rank(desc(tasting)))
+groupes  <- split(top_rang$Wines, top_rang$rang)   # vins regroupés par rang
+desc_rangs <- sapply(names(groupes), function(r) {
+  v <- groupes[[r]]
+  note <- fr(top_rang$tasting[top_rang$Wines == v[1]], 3)
+  if (length(v) > 1) paste0(paste(v, collapse = " et "), " ex aequo au rang ", r, " (", note, ")")
+  else paste0(v, " au rang ", r, " (", note, ")")
+})
+sols <- unique(top_tasting$Soul)
+```
+
+**Réponse :** à l'étape `tasting`, les meilleurs vins sont `r paste(desc_rangs, collapse = ", ")`. `r if (nrow(top_tasting) > 3) paste0("On obtient ", nrow(top_tasting), " vins et non 3 à cause des ex aequo (leurs notes moyennes sont strictement égales), qu'on garde tous. ") else ""``r if (length(sols) == 1) paste0("Tous ont le même type de sol : **", sols, "**.") else paste0("Leurs types de sol : ", paste0(top_tasting$Wines, " (", top_tasting$Soul, ")", collapse = ", "), ".")`
+
+### d. Lien entre `Global` et la moyenne `tasting`
+
+```{r C3d}
+vins_global <- vins_moy |>
+  left_join(select(vins, Wines, Global), by = "Wines")   # Wines identifie chaque vin
+
+cor_global <- cor(vins_global$Global, vins_global$tasting)
+cor_global
+
+test_global <- cor.test(vins_global$Global, vins_global$tasting)
+test_global$p.value
+
+ggplot(vins_global, aes(x = tasting, y = Global)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, formula = y ~ x) +
+  geom_text(aes(label = Wines), vjust = -0.6, size = 3) +
+  labs(x = "Note moyenne à l'étape tasting", y = "Note Global",
+       title = "Note globale et note moyenne en bouche des 21 vins")
+```
+
+**Réponse :** oui, la note `Global` est fortement liée à la moyenne obtenue à l'étape `tasting` : le coefficient de corrélation de Pearson vaut **`r fr(cor_global, 2)`**, soit une liaison positive et forte. Le test de corrélation donne une p-valeur de `r format(test_global$p.value, digits = 2)`, très inférieure à 5 % : la corrélation est significativement différente de 0. Les vins jugés bons en bouche sont donc aussi ceux qui ont une bonne note globale. Remarque : dans ce fichier, `Global` est `r if (identical(vins$Global, vins$Assessor1)) "strictement identique à la colonne \x60Assessor1\x60" else "différente de \x60Assessor1\x60"`.
