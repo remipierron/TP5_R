@@ -1066,3 +1066,95 @@ nes_meme_annee <- emp_propre |> filter(year(Birth_Date) %in% annee_nais)
 ```
 
 **Réponse :** l'âge minimal à l'embauche est de **`r min(emp_propre$age_embauche, na.rm = TRUE)` ans**, et **`r nrow(moins_16)` employés** ont été embauchés avant 16 ans : `r paste0(moins_16$First, " ", moins_16$Last, " (", moins_16$Job_Title, ", ", moins_16$Country, ", embauché·e le ", format(moins_16$Hire_Date, "%d/%m/%Y"), ")", collapse = " et ")`. C'est **peu plausible** : aux États-Unis, le travail avant 16 ans est strictement encadré (horaires limités, pas pendant le temps scolaire), ce qui cadre mal avec des postes de `r paste(moins_16$Job_Title, collapse = " et de ")` dans une enseigne. Le plus probable est une **erreur de saisie** de la date de naissance ou d'embauche, à vérifier auprès du service RH plutôt qu'à corriger d'office. On remarque aussi que ces deux employés sont nés en `r paste(annee_nais, collapse = ", ")`, l'année de naissance la plus récente du fichier : les `r nrow(nes_meme_annee)` employés nés cette année-là ont tous été embauchés entre `r min(nes_meme_annee$age_embauche, na.rm = TRUE)` et `r max(nes_meme_annee$age_embauche, na.rm = TRUE)` ans, ce qui mérite aussi une vérification.
+
+## D4
+
+### a. Import et correspondance des clients
+
+```{r D4a}
+commandes <- read_csv("data/commandes.csv", show_col_types = FALSE)
+clients   <- read_csv("data/customer.csv",  show_col_types = FALSE)
+dim(commandes)
+dim(clients)
+
+# Customer_ID est-il bien une clé (unique) dans le fichier clients ?
+anyDuplicated(clients$Customer_ID)
+
+# Lignes de commandes dont le client est absent du fichier clients
+cmd_sans_client <- anti_join(commandes, clients, by = "Customer_ID")
+nrow(cmd_sans_client)
+
+# Dans l'autre sens : clients qui n'ont rien commandé
+clients_sans_cmd <- anti_join(clients, commandes, by = "Customer_ID")
+nrow(clients_sans_cmd)
+```
+
+**Réponse :** `r if (nrow(cmd_sans_client) == 0) "oui" else "non"` : `anti_join()` renvoie `r nrow(cmd_sans_client)` ligne, donc `r if (nrow(cmd_sans_client) == 0) "chacun" else "tous ne figurent pas"` des `r n_distinct(commandes$Customer_ID)` clients différents présents dans les `r nrow(commandes)` lignes de commandes `r if (nrow(cmd_sans_client) == 0) "figure dans le fichier clients" else ""`. `Customer_ID` est bien unique dans le fichier clients (`anyDuplicated()` vaut `r anyDuplicated(clients$Customer_ID)`), ce qui garantit que la jointure ne dupliquera pas de lignes. À l'inverse, `r nrow(clients_sans_cmd)` des `r nrow(clients)` clients n'ont passé aucune commande.
+
+### b. Pays et sexe du client, CA par pays
+
+```{r D4b}
+cmd_clients <- commandes |>
+  left_join(select(clients, Customer_ID, Country, Gender), by = "Customer_ID")
+nrow(cmd_clients) == nrow(commandes)   # aucune ligne ajoutée ni perdue
+
+ca_pays <- cmd_clients |>
+  summarise(ca = sum(Total_Retail_Price), .by = Country) |>
+  mutate(part = ca / sum(ca)) |>
+  arrange(desc(ca))
+ca_pays
+```
+
+```{r D4b-texte, include=FALSE}
+part_us <- ca_pays$part[ca_pays$Country == "US"]
+```
+
+**Réponse :** le chiffre d'affaires total est de `r fr(sum(ca_pays$ca), 0)` dollars. Par pays de client : `r paste0(ca_pays$Country, " ", fr(ca_pays$ca, 0), " (", fr(100 * ca_pays$part), " %)", collapse = ", ")`. Les clients américains représentent **`r fr(100 * part_us)` % du CA**, `r if (part_us == max(ca_pays$part)) paste0("la première part, devant ", ca_pays$Country[2], " (", fr(100 * ca_pays$part[2]), " %)") else "ce n'est pas la première part"`.
+
+### c. Lien avec le fichier RH
+
+On ne garde que les ventes **avec** vendeur (`Employee_ID` différent de `99999999`), puis on regarde lesquelles retrouvent leur vendeur dans `emp_propre`. `semi_join()` garde les lignes qui ont une correspondance, `anti_join()` celles qui n'en ont pas, sans ajouter de colonnes ni dupliquer de lignes.
+
+```{r D4c}
+cmd_vendeur <- commandes |> filter(Employee_ID != 99999999)
+nrow(cmd_vendeur)
+n_distinct(cmd_vendeur$Employee_ID)        # nombre de vendeurs différents
+
+avec_rh <- semi_join(cmd_vendeur, emp_propre, by = "Employee_ID")
+sans_rh <- anti_join(cmd_vendeur, emp_propre, by = "Employee_ID")
+nrow(avec_rh)
+nrow(sans_rh)
+n_distinct(avec_rh$Employee_ID)            # vendeurs retrouvés
+
+# Les identifiants des vendeurs sont-ils dans la même plage que ceux du fichier RH ?
+range(cmd_vendeur$Employee_ID)
+range(emp_propre$Employee_ID)
+```
+
+**Réponse :** sur les `r nrow(cmd_vendeur)` lignes de commandes avec vendeur (`r n_distinct(cmd_vendeur$Employee_ID)` vendeurs différents), seules **`r nrow(avec_rh)` lignes** (`r fr(100 * nrow(avec_rh) / nrow(cmd_vendeur))` %) retrouvent leur vendeur dans `emp_propre`, ce qui correspond à `r n_distinct(avec_rh$Employee_ID)` vendeurs seulement ; `r nrow(sans_rh)` lignes n'ont pas de correspondance. Les identifiants sont pourtant du même format et dans la même plage de valeurs : ce n'est pas un problème de codage de la clé. On en conclut que les deux fichiers **ne couvrent pas le même périmètre** : `employee.csv` ne contient qu'une partie du personnel (`r nrow(emp_propre)` employés), alors que les commandes font intervenir de nombreux vendeurs absents de ce fichier. Les deux tables ne sont donc pas cohérentes entre elles : toute analyse des ventes par vendeur à partir de ces fichiers ne portera que sur une petite fraction des ventes et devra être interprétée avec prudence.
+
+### d. Vendeur au plus gros CA
+
+On calcule le CA par vendeur sur les lignes dont le vendeur est identifié, puis on récupère son nom et son poste par jointure. Avant de joindre, on vérifie que `Employee_ID` est unique dans `emp_propre` pour les vendeurs concernés (l'identifiant en double, 120108, pourrait sinon dupliquer des lignes).
+
+```{r D4d}
+# Identifiants en double parmi les vendeurs retrouvés ?
+emp_propre |>
+  filter(Employee_ID %in% avec_rh$Employee_ID) |>
+  count(Employee_ID) |>
+  filter(n > 1)
+
+ca_vendeur <- avec_rh |>
+  summarise(ca = sum(Total_Retail_Price),
+            nb_lignes = n(),
+            .by = Employee_ID) |>
+  left_join(select(emp_propre, Employee_ID, First, Last, Job_Title, Country),
+            by = "Employee_ID") |>
+  arrange(desc(ca))
+ca_vendeur
+
+meilleur_vendeur <- ca_vendeur |> slice_max(ca, n = 1)
+meilleur_vendeur
+```
+
+**Réponse :** parmi les `r nrow(ca_vendeur)` vendeurs identifiés, celui qui a réalisé le plus gros CA est **`r meilleur_vendeur$First` `r meilleur_vendeur$Last`**, `r meilleur_vendeur$Job_Title` (`r meilleur_vendeur$Country`), avec `r fr(meilleur_vendeur$ca, 2)` dollars sur `r meilleur_vendeur$nb_lignes` lignes de commande. Ce classement ne porte toutefois que sur les `r nrow(avec_rh)` lignes retrouvées dans le fichier RH (question c) : le « meilleur vendeur » de l'enseigne peut très bien faire partie des vendeurs absents de `employee.csv`.

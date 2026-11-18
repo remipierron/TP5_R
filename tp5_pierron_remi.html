@@ -3266,6 +3266,149 @@ sont nés en 1988, l’année de naissance la plus récente du fichier : les
 ans, ce qui mérite aussi une vérification.</p>
 </div>
 </div>
+<div id="d4" class="section level2">
+<h2>D4</h2>
+<div id="a.-import-et-correspondance-des-clients" class="section level3">
+<h3>a. Import et correspondance des clients</h3>
+<pre class="r"><code>commandes &lt;- read_csv(&quot;data/commandes.csv&quot;, show_col_types = FALSE)
+clients   &lt;- read_csv(&quot;data/customer.csv&quot;,  show_col_types = FALSE)
+dim(commandes)</code></pre>
+<pre><code>## [1] 617  10</code></pre>
+<pre class="r"><code>dim(clients)</code></pre>
+<pre><code>## [1] 77  9</code></pre>
+<pre class="r"><code># Customer_ID est-il bien une clé (unique) dans le fichier clients ?
+anyDuplicated(clients$Customer_ID)</code></pre>
+<pre><code>## [1] 0</code></pre>
+<pre class="r"><code># Lignes de commandes dont le client est absent du fichier clients
+cmd_sans_client &lt;- anti_join(commandes, clients, by = &quot;Customer_ID&quot;)
+nrow(cmd_sans_client)</code></pre>
+<pre><code>## [1] 0</code></pre>
+<pre class="r"><code># Dans l&#39;autre sens : clients qui n&#39;ont rien commandé
+clients_sans_cmd &lt;- anti_join(clients, commandes, by = &quot;Customer_ID&quot;)
+nrow(clients_sans_cmd)</code></pre>
+<pre><code>## [1] 2</code></pre>
+<p><strong>Réponse :</strong> oui : <code>anti_join()</code> renvoie 0
+ligne, donc chacun des 75 clients différents présents dans les 617
+lignes de commandes figure dans le fichier clients.
+<code>Customer_ID</code> est bien unique dans le fichier clients
+(<code>anyDuplicated()</code> vaut 0), ce qui garantit que la jointure
+ne dupliquera pas de lignes. À l’inverse, 2 des 77 clients n’ont passé
+aucune commande.</p>
+</div>
+<div id="b.-pays-et-sexe-du-client-ca-par-pays" class="section level3">
+<h3>b. Pays et sexe du client, CA par pays</h3>
+<pre class="r"><code>cmd_clients &lt;- commandes |&gt;
+  left_join(select(clients, Customer_ID, Country, Gender), by = &quot;Customer_ID&quot;)
+nrow(cmd_clients) == nrow(commandes)   # aucune ligne ajoutée ni perdue</code></pre>
+<pre><code>## [1] TRUE</code></pre>
+<pre class="r"><code>ca_pays &lt;- cmd_clients |&gt;
+  summarise(ca = sum(Total_Retail_Price), .by = Country) |&gt;
+  mutate(part = ca / sum(ca)) |&gt;
+  arrange(desc(ca))
+ca_pays</code></pre>
+<pre><code>## # A tibble: 7 × 3
+##   Country     ca   part
+##   &lt;chr&gt;    &lt;dbl&gt;  &lt;dbl&gt;
+## 1 US      43525. 0.435 
+## 2 AU      17321. 0.173 
+## 3 DE      15395. 0.154 
+## 4 CA      11951. 0.119 
+## 5 TR       5176. 0.0517
+## 6 ZA       5150. 0.0515
+## 7 IL       1560. 0.0156</code></pre>
+<p><strong>Réponse :</strong> le chiffre d’affaires total est de 100 077
+dollars. Par pays de client : US 43 525 (43,5 %), AU 17 321 (17,3 %), DE
+15 395 (15,4 %), CA 11 951 (11,9 %), TR 5 176 (5,2 %), ZA 5 150 (5,1 %),
+IL 1 560 (1,6 %). Les clients américains représentent <strong>43,5 % du
+CA</strong>, la première part, devant AU (17,3 %).</p>
+</div>
+<div id="c.-lien-avec-le-fichier-rh" class="section level3">
+<h3>c. Lien avec le fichier RH</h3>
+<p>On ne garde que les ventes <strong>avec</strong> vendeur
+(<code>Employee_ID</code> différent de <code>99999999</code>), puis on
+regarde lesquelles retrouvent leur vendeur dans <code>emp_propre</code>.
+<code>semi_join()</code> garde les lignes qui ont une correspondance,
+<code>anti_join()</code> celles qui n’en ont pas, sans ajouter de
+colonnes ni dupliquer de lignes.</p>
+<pre class="r"><code>cmd_vendeur &lt;- commandes |&gt; filter(Employee_ID != 99999999)
+nrow(cmd_vendeur)</code></pre>
+<pre><code>## [1] 324</code></pre>
+<pre class="r"><code>n_distinct(cmd_vendeur$Employee_ID)        # nombre de vendeurs différents</code></pre>
+<pre><code>## [1] 100</code></pre>
+<pre class="r"><code>avec_rh &lt;- semi_join(cmd_vendeur, emp_propre, by = &quot;Employee_ID&quot;)
+sans_rh &lt;- anti_join(cmd_vendeur, emp_propre, by = &quot;Employee_ID&quot;)
+nrow(avec_rh)</code></pre>
+<pre><code>## [1] 15</code></pre>
+<pre class="r"><code>nrow(sans_rh)</code></pre>
+<pre><code>## [1] 309</code></pre>
+<pre class="r"><code>n_distinct(avec_rh$Employee_ID)            # vendeurs retrouvés</code></pre>
+<pre><code>## [1] 7</code></pre>
+<pre class="r"><code># Les identifiants des vendeurs sont-ils dans la même plage que ceux du fichier RH ?
+range(cmd_vendeur$Employee_ID)</code></pre>
+<pre><code>## [1] 120121 121140</code></pre>
+<pre class="r"><code>range(emp_propre$Employee_ID)</code></pre>
+<pre><code>## [1] 120101 121149</code></pre>
+<p><strong>Réponse :</strong> sur les 324 lignes de commandes avec
+vendeur (100 vendeurs différents), seules <strong>15 lignes</strong>
+(4,6 %) retrouvent leur vendeur dans <code>emp_propre</code>, ce qui
+correspond à 7 vendeurs seulement ; 309 lignes n’ont pas de
+correspondance. Les identifiants sont pourtant du même format et dans la
+même plage de valeurs : ce n’est pas un problème de codage de la clé. On
+en conclut que les deux fichiers <strong>ne couvrent pas le même
+périmètre</strong> : <code>employee.csv</code> ne contient qu’une partie
+du personnel (235 employés), alors que les commandes font intervenir de
+nombreux vendeurs absents de ce fichier. Les deux tables ne sont donc
+pas cohérentes entre elles : toute analyse des ventes par vendeur à
+partir de ces fichiers ne portera que sur une petite fraction des ventes
+et devra être interprétée avec prudence.</p>
+</div>
+<div id="d.-vendeur-au-plus-gros-ca" class="section level3">
+<h3>d. Vendeur au plus gros CA</h3>
+<p>On calcule le CA par vendeur sur les lignes dont le vendeur est
+identifié, puis on récupère son nom et son poste par jointure. Avant de
+joindre, on vérifie que <code>Employee_ID</code> est unique dans
+<code>emp_propre</code> pour les vendeurs concernés (l’identifiant en
+double, 120108, pourrait sinon dupliquer des lignes).</p>
+<pre class="r"><code># Identifiants en double parmi les vendeurs retrouvés ?
+emp_propre |&gt;
+  filter(Employee_ID %in% avec_rh$Employee_ID) |&gt;
+  count(Employee_ID) |&gt;
+  filter(n &gt; 1)</code></pre>
+<pre><code>## # A tibble: 0 × 2
+## # ℹ 2 variables: Employee_ID &lt;dbl&gt;, n &lt;int&gt;</code></pre>
+<pre class="r"><code>ca_vendeur &lt;- avec_rh |&gt;
+  summarise(ca = sum(Total_Retail_Price),
+            nb_lignes = n(),
+            .by = Employee_ID) |&gt;
+  left_join(select(emp_propre, Employee_ID, First, Last, Job_Title, Country),
+            by = &quot;Employee_ID&quot;) |&gt;
+  arrange(desc(ca))
+ca_vendeur</code></pre>
+<pre><code>## # A tibble: 7 × 7
+##   Employee_ID    ca nb_lignes First   Last       Job_Title            Country
+##         &lt;dbl&gt; &lt;dbl&gt;     &lt;int&gt; &lt;chr&gt;   &lt;chr&gt;      &lt;chr&gt;                &lt;chr&gt;  
+## 1      120732 668.          4 Kent    Uenking    Purchasing Agent III US     
+## 2      120733 619.          4 Michael Bezinque   Purchasing Agent I   US     
+## 3      120190 240           1 Ivor    Czernezkyi Trainee              AU     
+## 4      120195 224.          3 Jina    Fiocca     Trainee              AU     
+## 5      121127 179.          1 Keyna   Mangini    Trainee              US     
+## 6      120192 124.          1 Anthony Nichollas  Trainee              AU     
+## 7      120734  40.2         1 Svein   Saylor     Purchasing Agent III US</code></pre>
+<pre class="r"><code>meilleur_vendeur &lt;- ca_vendeur |&gt; slice_max(ca, n = 1)
+meilleur_vendeur</code></pre>
+<pre><code>## # A tibble: 1 × 7
+##   Employee_ID    ca nb_lignes First Last    Job_Title            Country
+##         &lt;dbl&gt; &lt;dbl&gt;     &lt;int&gt; &lt;chr&gt; &lt;chr&gt;   &lt;chr&gt;                &lt;chr&gt;  
+## 1      120732  668.         4 Kent  Uenking Purchasing Agent III US</code></pre>
+<p><strong>Réponse :</strong> parmi les 7 vendeurs identifiés, celui qui
+a réalisé le plus gros CA est <strong>Kent Uenking</strong>, Purchasing
+Agent III (US), avec 668,10 dollars sur 4 lignes de commande. Ce
+classement ne porte toutefois que sur les 15 lignes retrouvées dans le
+fichier RH (question c) : le « meilleur vendeur » de l’enseigne peut
+très bien faire partie des vendeurs absents de
+<code>employee.csv</code>.</p>
+</div>
+</div>
 </div>
 
 
