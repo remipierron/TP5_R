@@ -2475,6 +2475,93 @@ par mois). La plus forte hausse entre 2024 et 2025 est celle de
 soit 154 mm de plus (3,3 fois plus de pluie).</p>
 </div>
 </div>
+<div id="c2" class="section level2">
+<h2>C2</h2>
+<div id="format-long-une-ligne-par-station-date-et-type-de-mesure" class="section level3">
+<h3>Format long : une ligne par station, date et type de mesure</h3>
+<p>On ne garde que les colonnes utiles, puis <code>pivot_longer()</code>
+empile <code>temp_min</code> et <code>temp_max</code>.
+<code>names_prefix = &quot;temp_&quot;</code> retire le préfixe commun pour que le
+type de mesure vaille simplement <code>min</code> ou
+<code>max</code>.</p>
+<pre class="r"><code>temp_long &lt;- meteo |&gt;
+  select(station, date, temp_min, temp_max) |&gt;
+  pivot_longer(cols         = c(temp_min, temp_max),
+               names_to     = &quot;type&quot;,
+               names_prefix = &quot;temp_&quot;,        # &quot;temp_min&quot; -&gt; &quot;min&quot;
+               values_to    = &quot;temperature&quot;)
+temp_long</code></pre>
+<pre><code>## # A tibble: 248 × 4
+##    station date       type  temperature
+##    &lt;chr&gt;   &lt;date&gt;     &lt;chr&gt;       &lt;dbl&gt;
+##  1 Orléans 2026-01-01 min           2.3
+##  2 Orléans 2026-01-01 max           4.8
+##  3 Orléans 2026-01-02 min          -1.7
+##  4 Orléans 2026-01-02 max           5.2
+##  5 Orléans 2026-01-03 min           1.3
+##  6 Orléans 2026-01-03 max           6.2
+##  7 Orléans 2026-01-04 min           0.8
+##  8 Orléans 2026-01-04 max           6.5
+##  9 Orléans 2026-01-05 min          -0.7
+## 10 Orléans 2026-01-05 max           6.4
+## # ℹ 238 more rows</code></pre>
+<pre class="r"><code>count(temp_long, type)</code></pre>
+<pre><code>## # A tibble: 2 × 2
+##   type      n
+##   &lt;chr&gt; &lt;int&gt;
+## 1 max     124
+## 2 min     124</code></pre>
+<p><code>temp_long</code> compte 248 lignes : 2 mesures pour chacune des
+124 lignes (station × jour) de <code>meteo</code>. Les 6 températures
+manquantes sont conservées sous forme de <code>NA</code>.</p>
+</div>
+<div id="amplitude-thermique-retour-au-format-large" class="section level3">
+<h3>Amplitude thermique : retour au format large</h3>
+<p>Pour calculer <code>max - min</code>, il faut que les deux mesures
+d’un même jour soient sur la même ligne : on repasse au format large
+avec <code>pivot_wider()</code>, puis on fait la moyenne par station.
+Les jours où <code>max</code> est manquant donnent une amplitude
+<code>NA</code>, qu’on écarte avec <code>na.rm = TRUE</code>.</p>
+<pre class="r"><code>amplitude &lt;- temp_long |&gt;
+  pivot_wider(names_from = type, values_from = temperature) |&gt;   # colonnes min et max
+  mutate(amplitude = max - min) |&gt;
+  summarise(amplitude_moy = mean(amplitude, na.rm = TRUE),
+            nb_jours      = sum(!is.na(amplitude)),   # jours réellement utilisés
+            .by = station) |&gt;
+  arrange(desc(amplitude_moy))
+amplitude</code></pre>
+<pre><code>## # A tibble: 4 × 3
+##   station       amplitude_moy nb_jours
+##   &lt;chr&gt;                 &lt;dbl&gt;    &lt;int&gt;
+## 1 Saint-Étienne          6.36       30
+## 2 Orléans                6.33       29
+## 3 Nîmes                  6.16       29
+## 4 Besançon               6.13       30</code></pre>
+<pre class="r"><code># Contrôle : même calcul directement sur meteo, sans passer par le format long
+controle_amp &lt;- meteo |&gt;
+  summarise(amplitude_moy = mean(temp_max - temp_min, na.rm = TRUE), .by = station) |&gt;
+  arrange(desc(amplitude_moy))
+controle_amp</code></pre>
+<pre><code>## # A tibble: 4 × 2
+##   station       amplitude_moy
+##   &lt;chr&gt;                 &lt;dbl&gt;
+## 1 Saint-Étienne          6.36
+## 2 Orléans                6.33
+## 3 Nîmes                  6.16
+## 4 Besançon               6.13</code></pre>
+<pre class="r"><code>all.equal(amplitude$amplitude_moy, controle_amp$amplitude_moy)</code></pre>
+<pre><code>## [1] TRUE</code></pre>
+<p><strong>Réponse :</strong> l’amplitude thermique quotidienne moyenne
+de janvier 2026 est de 6,36 °C à Saint-Étienne, 6,33 °C à Orléans, 6,16
+°C à Nîmes, 6,13 °C à Besançon. Les quatre stations sont très proches
+(écart de 0,23 °C seulement entre la plus forte, Saint-Étienne, et la
+plus faible, Besançon), alors que leurs températures moyennes sont très
+différentes (question A4). Les moyennes portent sur 29 à 30 jours selon
+la station, à cause des valeurs manquantes de <code>temp_max</code>. Le
+calcul direct sur <code>meteo</code> donne les mêmes valeurs, ce qui
+valide le passage long → large.</p>
+</div>
+</div>
 </div>
 
 

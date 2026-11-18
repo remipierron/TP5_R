@@ -628,3 +628,46 @@ plus_forte_hausse
 ```
 
 **Réponse :** le tableau a `r nrow(pluie_annees)` lignes (une par station et par mois). La plus forte hausse entre 2024 et 2025 est celle de **`r plus_forte_hausse$station` en `r plus_forte_hausse$mois`** : `r plus_forte_hausse[["2024"]]` mm en 2024 contre `r plus_forte_hausse[["2025"]]` mm en 2025, soit `r plus_forte_hausse$difference` mm de plus (`r fr(plus_forte_hausse[["2025"]] / plus_forte_hausse[["2024"]])` fois plus de pluie).
+
+## C2
+
+### Format long : une ligne par station, date et type de mesure
+
+On ne garde que les colonnes utiles, puis `pivot_longer()` empile `temp_min` et `temp_max`. `names_prefix = "temp_"` retire le préfixe commun pour que le type de mesure vaille simplement `min` ou `max`.
+
+```{r C2-long}
+temp_long <- meteo |>
+  select(station, date, temp_min, temp_max) |>
+  pivot_longer(cols         = c(temp_min, temp_max),
+               names_to     = "type",
+               names_prefix = "temp_",        # "temp_min" -> "min"
+               values_to    = "temperature")
+temp_long
+count(temp_long, type)
+```
+
+`temp_long` compte `r nrow(temp_long)` lignes : 2 mesures pour chacune des `r nrow(meteo)` lignes (station × jour) de `meteo`. Les `r sum(is.na(temp_long$temperature))` températures manquantes sont conservées sous forme de `NA`.
+
+### Amplitude thermique : retour au format large
+
+Pour calculer `max - min`, il faut que les deux mesures d'un même jour soient sur la même ligne : on repasse au format large avec `pivot_wider()`, puis on fait la moyenne par station. Les jours où `max` est manquant donnent une amplitude `NA`, qu'on écarte avec `na.rm = TRUE`.
+
+```{r C2-amplitude}
+amplitude <- temp_long |>
+  pivot_wider(names_from = type, values_from = temperature) |>   # colonnes min et max
+  mutate(amplitude = max - min) |>
+  summarise(amplitude_moy = mean(amplitude, na.rm = TRUE),
+            nb_jours      = sum(!is.na(amplitude)),   # jours réellement utilisés
+            .by = station) |>
+  arrange(desc(amplitude_moy))
+amplitude
+
+# Contrôle : même calcul directement sur meteo, sans passer par le format long
+controle_amp <- meteo |>
+  summarise(amplitude_moy = mean(temp_max - temp_min, na.rm = TRUE), .by = station) |>
+  arrange(desc(amplitude_moy))
+controle_amp
+all.equal(amplitude$amplitude_moy, controle_amp$amplitude_moy)
+```
+
+**Réponse :** l'amplitude thermique quotidienne moyenne de janvier 2026 est de `r paste0(fr(amplitude$amplitude_moy, 2), " °C à ", amplitude$station, collapse = ", ")`. Les quatre stations sont très proches (écart de `r fr(max(amplitude$amplitude_moy) - min(amplitude$amplitude_moy), 2)` °C seulement entre la plus forte, `r amplitude$station[1]`, et la plus faible, `r amplitude$station[nrow(amplitude)]`), alors que leurs températures moyennes sont très différentes (question A4). Les moyennes portent sur `r paste(range(amplitude$nb_jours), collapse = " à ")` jours selon la station, à cause des valeurs manquantes de `temp_max`. `r if (isTRUE(all.equal(amplitude$amplitude_moy, controle_amp$amplitude_moy))) "Le calcul direct sur \x60meteo\x60 donne les mêmes valeurs, ce qui valide le passage long → large." else "Attention : le calcul direct sur \x60meteo\x60 donne des valeurs différentes."`
