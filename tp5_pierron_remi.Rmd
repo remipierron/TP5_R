@@ -20,6 +20,8 @@ fr <- function(x, d = 1) {
 }
 ```
 
+Dépôt GitHub du TP : <https://github.com/remipierron/TP5_R>
+
 # Partie A : Importer des fichiers texte récalcitrants
 
 ## A1
