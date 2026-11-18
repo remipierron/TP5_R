@@ -12,6 +12,12 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(readxl)
+
+# Mise en forme « à la française » des nombres insérés dans le texte
+# (virgule décimale, espace pour les milliers)
+fr <- function(x, d = 1) {
+  format(round(x, d), nsmall = d, big.mark = " ", decimal.mark = ",")
+}
 ```
 
 # Partie A : Importer des fichiers texte récalcitrants
@@ -59,14 +65,18 @@ str(ref)
 Pour vérifier chaque import en **une** instruction, on compare en même temps les noms, les dimensions et les types (classe de chaque colonne) avec ceux de `ref` :
 
 ```{r A1-verif}
-identical(list(names(l3),  dim(l3),  sapply(l3,  class)),
-          list(names(ref), dim(ref), sapply(ref, class)))
-identical(list(names(sn),  dim(sn),  sapply(sn,  class)),
-          list(names(ref), dim(ref), sapply(ref, class)))
-identical(list(names(dm),  dim(dm),  sapply(dm,  class)),
-          list(names(ref), dim(ref), sapply(ref, class)))
-identical(list(names(d99), dim(d99), sapply(d99, class)),
-          list(names(ref), dim(ref), sapply(ref, class)))
+# Une instruction (identical) par fichier, regroupées dans un vecteur nommé
+meme_structure <- c(
+  l3  = identical(list(names(l3),  dim(l3),  sapply(l3,  class)),
+                  list(names(ref), dim(ref), sapply(ref, class))),
+  sn  = identical(list(names(sn),  dim(sn),  sapply(sn,  class)),
+                  list(names(ref), dim(ref), sapply(ref, class))),
+  dm  = identical(list(names(dm),  dim(dm),  sapply(dm,  class)),
+                  list(names(ref), dim(ref), sapply(ref, class))),
+  d99 = identical(list(names(d99), dim(d99), sapply(d99, class)),
+                  list(names(ref), dim(ref), sapply(ref, class)))
+)
+meme_structure
 ```
 
 Pour les deux fichiers sans valeurs manquantes, on peut même vérifier que le contenu est strictement identique :
@@ -76,4 +86,78 @@ all.equal(l3, ref)
 all.equal(sn, ref)
 ```
 
-**Réponse :** les quatre imports renvoient `TRUE` : ils ont les mêmes noms, les mêmes dimensions (24 lignes, 7 colonnes) et les mêmes types (`Modele` en `character`, les 6 autres colonnes en `integer`) que la référence. Il a fallu `skip = 3` et `fileEncoding = "latin1"` pour le fichier avec description, `header = FALSE` et `col.names = names(ref)` pour le fichier sans en-tête, et `na.strings = "99999"` pour le fichier où les manquantes sont codées 99999 (sans cet argument les colonnes resteraient numériques mais contiendraient des valeurs aberrantes). Les fichiers `l3` et `sn` sont de plus identiques à `ref` en valeurs ; `dm` et `d99` ne diffèrent que par leurs valeurs manquantes.
+```{r A1-types, include=FALSE}
+# Types de la référence, pour la phrase de réponse
+types_ref <- table(sapply(ref, class))
+```
+
+**Réponse :** `r sum(meme_structure)` imports sur `r length(meme_structure)` renvoient `TRUE` : ils ont les mêmes noms, les mêmes dimensions (`r nrow(ref)` lignes, `r ncol(ref)` colonnes) et les mêmes types (`r paste(types_ref, "colonne(s) en", paste0("\x60", names(types_ref), "\x60"), collapse = " et ")`) que la référence. Il a fallu `skip = 3` et `fileEncoding = "latin1"` pour le fichier avec description, `header = FALSE` et `col.names = names(ref)` pour le fichier sans en-tête, et `na.strings = "99999"` pour le fichier où les manquantes sont codées 99999 (sans cet argument les colonnes resteraient numériques mais contiendraient des valeurs aberrantes). Les fichiers `l3` et `sn` sont de plus identiques à `ref` en valeurs ; `dm` et `d99` ne diffèrent que par leurs valeurs manquantes.
+
+## A2
+
+### a. Nombre et positions des valeurs manquantes
+
+```{r A2a}
+# Nombre total de NA dans chaque fichier
+sum(is.na(dm))
+sum(is.na(d99))
+
+# Répartition par colonne
+na_dm  <- colSums(is.na(dm))
+na_d99 <- colSums(is.na(d99))
+na_dm
+na_d99
+
+# Mêmes positions ? On compare les deux matrices logiques de is.na()
+memes_positions <- identical(is.na(dm), is.na(d99))
+memes_positions
+```
+
+**Réponse :** `dm` contient **`r sum(na_dm)` valeurs manquantes** et `d99` en contient **`r sum(na_d99)`** (répartition dans `dm` : `r paste(na_dm[na_dm > 0], "en", names(na_dm)[na_dm > 0], collapse = ", ")` ; aucune pour `r paste(names(na_dm)[na_dm == 0], collapse = ", ")`). `identical()` renvoie `` `r memes_positions` `` : `r if (memes_positions) "les deux matrices \x60is.na()\x60 sont identiques, donc les valeurs manquantes sont **exactement aux mêmes positions** dans les deux fichiers" else "les valeurs manquantes ne sont **pas** aux mêmes positions dans les deux fichiers"`.
+
+### b. Valeurs originales des cases manquantes
+
+`which(..., arr.ind = TRUE)` donne la ligne et la colonne de chaque case manquante. On s'en sert pour aller chercher dans `ref` le modèle et la valeur d'origine.
+
+```{r A2b}
+pos <- which(is.na(dm), arr.ind = TRUE)   # matrice (ligne, colonne) des NA
+
+manquantes <- data.frame(
+  Modele           = ref$Modele[pos[, "row"]],
+  variable         = names(ref)[pos[, "col"]],
+  valeur_originale = ref[pos]               # indexation par matrice
+)
+manquantes[order(manquantes$Modele), ]
+
+# Voitures ayant plusieurs cases manquantes
+nb_par_voiture <- table(manquantes$Modele)
+nb_par_voiture[nb_par_voiture > 1]
+```
+
+```{r A2b-texte, include=FALSE}
+# Phrase listant les voitures avec plusieurs NA et leurs valeurs d'origine
+multi <- names(nb_par_voiture)[nb_par_voiture > 1]
+detail_multi <- sapply(multi, function(m) {
+  lignes <- manquantes[manquantes$Modele == m, ]
+  paste0(m, " (", paste(lignes$variable, lignes$valeur_originale, collapse = " et "), ")")
+})
+```
+
+**Réponse :** `r length(nb_par_voiture)` voitures sont concernées (`r nrow(manquantes)` cases manquantes). `r length(multi)` voitures ont plusieurs valeurs manquantes : `r paste(detail_multi, collapse = ", ")`. Le tableau ci-dessus donne toutes les valeurs d'origine retrouvées dans `ref`.
+
+### c. Puissance moyenne sans `na.strings`
+
+```{r A2c}
+d99_brut <- read.delim("data/auto2004_don_manquan_99999.txt")   # sans na.strings
+summary(d99_brut$Puissance)   # le max à 99999 trahit un code de valeur manquante
+
+moy_fausse <- mean(d99_brut$Puissance)
+moy_juste  <- mean(d99$Puissance, na.rm = TRUE)
+moy_ref    <- mean(ref$Puissance)
+c(fausse = moy_fausse, juste = moy_juste, reference = moy_ref)
+
+moy_fausse - moy_juste   # écart absolu
+moy_fausse / moy_juste   # facteur d'erreur
+```
+
+**Réponse :** sans `na.strings`, les `r sum(d99_brut$Puissance == 99999)` valeurs `99999` sont comptées comme de vraies puissances et la moyenne vaut **`r fr(moy_fausse)` ch** au lieu de **`r fr(moy_juste)` ch** (moyenne calculée sur les `r sum(!is.na(d99$Puissance))` puissances connues). On se trompe donc d'environ **`r fr(moy_fausse - moy_juste, 0)` ch**, soit une moyenne environ **`r fr(moy_fausse / moy_juste, 0)` fois trop grande**. Pour information, la vraie moyenne sur les `r nrow(ref)` voitures (fichier `ref`) est de `r fr(moy_ref)` ch : même en traitant correctement les NA, il reste un écart de `r fr(abs(moy_juste - moy_ref))` ch, car les voitures dont la puissance manque ne sont pas prises en compte.

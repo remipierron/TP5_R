@@ -1557,29 +1557,31 @@ str(ref)</code></pre>
 <p>Pour vérifier chaque import en <strong>une</strong> instruction, on
 compare en même temps les noms, les dimensions et les types (classe de
 chaque colonne) avec ceux de <code>ref</code> :</p>
-<pre class="r"><code>identical(list(names(l3),  dim(l3),  sapply(l3,  class)),
-          list(names(ref), dim(ref), sapply(ref, class)))</code></pre>
-<pre><code>## [1] TRUE</code></pre>
-<pre class="r"><code>identical(list(names(sn),  dim(sn),  sapply(sn,  class)),
-          list(names(ref), dim(ref), sapply(ref, class)))</code></pre>
-<pre><code>## [1] TRUE</code></pre>
-<pre class="r"><code>identical(list(names(dm),  dim(dm),  sapply(dm,  class)),
-          list(names(ref), dim(ref), sapply(ref, class)))</code></pre>
-<pre><code>## [1] TRUE</code></pre>
-<pre class="r"><code>identical(list(names(d99), dim(d99), sapply(d99, class)),
-          list(names(ref), dim(ref), sapply(ref, class)))</code></pre>
-<pre><code>## [1] TRUE</code></pre>
+<pre class="r"><code># Une instruction (identical) par fichier, regroupées dans un vecteur nommé
+meme_structure &lt;- c(
+  l3  = identical(list(names(l3),  dim(l3),  sapply(l3,  class)),
+                  list(names(ref), dim(ref), sapply(ref, class))),
+  sn  = identical(list(names(sn),  dim(sn),  sapply(sn,  class)),
+                  list(names(ref), dim(ref), sapply(ref, class))),
+  dm  = identical(list(names(dm),  dim(dm),  sapply(dm,  class)),
+                  list(names(ref), dim(ref), sapply(ref, class))),
+  d99 = identical(list(names(d99), dim(d99), sapply(d99, class)),
+                  list(names(ref), dim(ref), sapply(ref, class)))
+)
+meme_structure</code></pre>
+<pre><code>##   l3   sn   dm  d99 
+## TRUE TRUE TRUE TRUE</code></pre>
 <p>Pour les deux fichiers sans valeurs manquantes, on peut même vérifier
 que le contenu est strictement identique :</p>
 <pre class="r"><code>all.equal(l3, ref)</code></pre>
 <pre><code>## [1] TRUE</code></pre>
 <pre class="r"><code>all.equal(sn, ref)</code></pre>
 <pre><code>## [1] TRUE</code></pre>
-<p><strong>Réponse :</strong> les quatre imports renvoient
+<p><strong>Réponse :</strong> 4 imports sur 4 renvoient
 <code>TRUE</code> : ils ont les mêmes noms, les mêmes dimensions (24
-lignes, 7 colonnes) et les mêmes types (<code>Modele</code> en
-<code>character</code>, les 6 autres colonnes en <code>integer</code>)
-que la référence. Il a fallu <code>skip = 3</code> et
+lignes, 7 colonnes) et les mêmes types (1 colonne(s) en
+<code>character</code> et 6 colonne(s) en <code>integer</code>) que la
+référence. Il a fallu <code>skip = 3</code> et
 <code>fileEncoding = &quot;latin1&quot;</code> pour le fichier avec description,
 <code>header = FALSE</code> et <code>col.names = names(ref)</code> pour
 le fichier sans en-tête, et <code>na.strings = &quot;99999&quot;</code> pour le
@@ -1588,6 +1590,111 @@ colonnes resteraient numériques mais contiendraient des valeurs
 aberrantes). Les fichiers <code>l3</code> et <code>sn</code> sont de
 plus identiques à <code>ref</code> en valeurs ; <code>dm</code> et
 <code>d99</code> ne diffèrent que par leurs valeurs manquantes.</p>
+</div>
+<div id="a2" class="section level2">
+<h2>A2</h2>
+<div id="a.-nombre-et-positions-des-valeurs-manquantes" class="section level3">
+<h3>a. Nombre et positions des valeurs manquantes</h3>
+<pre class="r"><code># Nombre total de NA dans chaque fichier
+sum(is.na(dm))</code></pre>
+<pre><code>## [1] 17</code></pre>
+<pre class="r"><code>sum(is.na(d99))</code></pre>
+<pre><code>## [1] 17</code></pre>
+<pre class="r"><code># Répartition par colonne
+na_dm  &lt;- colSums(is.na(dm))
+na_d99 &lt;- colSums(is.na(d99))
+na_dm</code></pre>
+<pre><code>##    Modele Cylindree Puissance   Vitesse     Poids   Largeur  Longueur 
+##         0         1         4         4         4         1         3</code></pre>
+<pre class="r"><code>na_d99</code></pre>
+<pre><code>##    Modele Cylindree Puissance   Vitesse     Poids   Largeur  Longueur 
+##         0         1         4         4         4         1         3</code></pre>
+<pre class="r"><code># Mêmes positions ? On compare les deux matrices logiques de is.na()
+memes_positions &lt;- identical(is.na(dm), is.na(d99))
+memes_positions</code></pre>
+<pre><code>## [1] TRUE</code></pre>
+<p><strong>Réponse :</strong> <code>dm</code> contient <strong>17
+valeurs manquantes</strong> et <code>d99</code> en contient
+<strong>17</strong> (répartition dans <code>dm</code> : 1 en Cylindree,
+4 en Puissance, 4 en Vitesse, 4 en Poids, 1 en Largeur, 3 en Longueur ;
+aucune pour Modele). <code>identical()</code> renvoie <code>TRUE</code>
+: les deux matrices <code>is.na()</code> sont identiques, donc les
+valeurs manquantes sont <strong>exactement aux mêmes positions</strong>
+dans les deux fichiers.</p>
+</div>
+<div id="b.-valeurs-originales-des-cases-manquantes" class="section level3">
+<h3>b. Valeurs originales des cases manquantes</h3>
+<p><code>which(..., arr.ind = TRUE)</code> donne la ligne et la colonne
+de chaque case manquante. On s’en sert pour aller chercher dans
+<code>ref</code> le modèle et la valeur d’origine.</p>
+<pre class="r"><code>pos &lt;- which(is.na(dm), arr.ind = TRUE)   # matrice (ligne, colonne) des NA
+
+manquantes &lt;- data.frame(
+  Modele           = ref$Modele[pos[, &quot;row&quot;]],
+  variable         = names(ref)[pos[, &quot;col&quot;]],
+  valeur_originale = ref[pos]               # indexation par matrice
+)
+manquantes[order(manquantes$Modele), ]</code></pre>
+<pre><code>##                           Modele  variable valeur_originale
+## 8          Aston Martin Vanquish   Vitesse              306
+## 14         Aston Martin Vanquish   Largeur             1923
+## 12              Audi TT 1.8T 180     Poids             1280
+## 1         Bentley Continental GT Cylindree             5998
+## 16        Bentley Continental GT  Longueur             4804
+## 7                    BMW Z4 2.5i   Vitesse              235
+## 11                   BMW Z4 2.5i     Poids             1260
+## 2            Citroen C2 1.1 Base Puissance               61
+## 15           Citroen C2 1.1 Base  Longueur             3666
+## 17       Land Rover Defender Td5  Longueur             3883
+## 13      Land Rover Discovery Td5     Poids             2175
+## 3      Mercedes Classe C 270 CDI Puissance              170
+## 4      Mercedes Classe S 400 CDI Puissance              260
+## 10           Renault Clio 3.0 V6     Poids             1400
+## 9     Renault Scenic 1.9 dCi 120   Vitesse              188
+## 6             Smart Fortwo Coupe   Vitesse              135
+## 5  Volkswagen Touran 1.9 TDI 105 Puissance              105</code></pre>
+<pre class="r"><code># Voitures ayant plusieurs cases manquantes
+nb_par_voiture &lt;- table(manquantes$Modele)
+nb_par_voiture[nb_par_voiture &gt; 1]</code></pre>
+<pre><code>## 
+##  Aston Martin Vanquish Bentley Continental GT            BMW Z4 2.5i 
+##                      2                      2                      2 
+##    Citroen C2 1.1 Base 
+##                      2</code></pre>
+<p><strong>Réponse :</strong> 13 voitures sont concernées (17 cases
+manquantes). 4 voitures ont plusieurs valeurs manquantes : Aston Martin
+Vanquish (Vitesse 306 et Largeur 1923), Bentley Continental GT
+(Cylindree 5998 et Longueur 4804), BMW Z4 2.5i (Vitesse 235 et Poids
+1260), Citroen C2 1.1 Base (Puissance 61 et Longueur 3666). Le tableau
+ci-dessus donne toutes les valeurs d’origine retrouvées dans
+<code>ref</code>.</p>
+</div>
+<div id="c.-puissance-moyenne-sans-na.strings" class="section level3">
+<h3>c. Puissance moyenne sans <code>na.strings</code></h3>
+<pre class="r"><code>d99_brut &lt;- read.delim(&quot;data/auto2004_don_manquan_99999.txt&quot;)   # sans na.strings
+summary(d99_brut$Puissance)   # le max à 99999 trahit un code de valeur manquante</code></pre>
+<pre><code>##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+##    52.0   121.5   199.5 16848.3   485.0 99999.0</code></pre>
+<pre class="r"><code>moy_fausse &lt;- mean(d99_brut$Puissance)
+moy_juste  &lt;- mean(d99$Puissance, na.rm = TRUE)
+moy_ref    &lt;- mean(ref$Puissance)
+c(fausse = moy_fausse, juste = moy_juste, reference = moy_ref)</code></pre>
+<pre><code>##     fausse      juste  reference 
+## 16848.3333   218.2000   206.6667</code></pre>
+<pre class="r"><code>moy_fausse - moy_juste   # écart absolu</code></pre>
+<pre><code>## [1] 16630.13</code></pre>
+<pre class="r"><code>moy_fausse / moy_juste   # facteur d&#39;erreur</code></pre>
+<pre><code>## [1] 77.21509</code></pre>
+<p><strong>Réponse :</strong> sans <code>na.strings</code>, les 4
+valeurs <code>99999</code> sont comptées comme de vraies puissances et
+la moyenne vaut <strong>16 848,3 ch</strong> au lieu de <strong>218,2
+ch</strong> (moyenne calculée sur les 20 puissances connues). On se
+trompe donc d’environ <strong>16 630 ch</strong>, soit une moyenne
+environ <strong>77 fois trop grande</strong>. Pour information, la vraie
+moyenne sur les 24 voitures (fichier <code>ref</code>) est de 206,7 ch :
+même en traitant correctement les NA, il reste un écart de 11,5 ch, car
+les voitures dont la puissance manque ne sont pas prises en compte.</p>
+</div>
 </div>
 </div>
 
